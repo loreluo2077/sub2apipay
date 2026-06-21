@@ -5,6 +5,10 @@
   "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "next dev",
+    "dev:mock-sub2api": "node mock-sub2api/server.mjs",
+    "dev:local": "bash scripts/dev-local.sh",
+    "dev:stop": "pnpm kill:ports -- 3000 3001",
+    "kill:ports": "node scripts/kill-ports.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -12,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed:real-demo-data": "node scripts/seed-real-demo-data.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.4.1",

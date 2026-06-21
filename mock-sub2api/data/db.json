@@ -1,0 +1,374 @@
+{
+  "users": [
+    {
+      "id": 1001,
+      "username": "demo-user",
+      "email": "demo-user@example.com",
+      "status": "active",
+      "balance": 158.5,
+      "notes": "Primary demo account",
+      "role": "user",
+      "token": "mock-user-token"
+    },
+    {
+      "id": 9001,
+      "username": "mock-admin",
+      "email": "admin@example.com",
+      "status": "active",
+      "balance": 0,
+      "notes": "Mock admin account",
+      "role": "admin",
+      "token": "mock-admin-token"
+    },
+    {
+      "id": 9002,
+      "username": "test-user",
+      "email": "test-user@example.com",
+      "status": "active",
+      "balance": 100,
+      "notes": "Created from mock console",
+      "role": "user",
+      "token": "mock-test-user-9ba609"
+    },
+    {
+      "id": 9003,
+      "username": "test-user",
+      "email": "test-user@example.com",
+      "status": "active",
+      "balance": 100,
+      "notes": "Created from mock console",
+      "role": "user",
+      "token": "mock-test-user-c904f7"
+    }
+  ],
+  "groups": [
+    {
+      "id": 101,
+      "name": "Claude Shared Pool",
+      "description": "Claude models via shared pool",
+      "platform": "claude",
+      "status": "active",
+      "rate_multiplier": 0.15,
+      "subscription_type": "standard",
+      "daily_limit_usd": null,
+      "weekly_limit_usd": null,
+      "monthly_limit_usd": null,
+      "default_validity_days": 30,
+      "sort_order": 1,
+      "supported_model_scopes": [
+        "claude-sonnet-4",
+        "claude-opus-4"
+      ],
+      "allow_messages_dispatch": true,
+      "default_mapped_model": "claude-sonnet-4"
+    },
+    {
+      "id": 102,
+      "name": "OpenAI Fast Pool",
+      "description": "OpenAI shared route for top-up",
+      "platform": "openai",
+      "status": "active",
+      "rate_multiplier": 0.2,
+      "subscription_type": "standard",
+      "daily_limit_usd": null,
+      "weekly_limit_usd": null,
+      "monthly_limit_usd": null,
+      "default_validity_days": 30,
+      "sort_order": 2,
+      "supported_model_scopes": [
+        "gpt-4.1",
+        "gpt-4o-mini"
+      ],
+      "allow_messages_dispatch": true,
+      "default_mapped_model": "gpt-4.1"
+    },
+    {
+      "id": 201,
+      "name": "Claude Monthly Pro",
+      "description": "Claude subscription plan group",
+      "platform": "claude",
+      "status": "active",
+      "rate_multiplier": 0.12,
+      "subscription_type": "subscription",
+      "daily_limit_usd": 20,
+      "weekly_limit_usd": null,
+      "monthly_limit_usd": 300,
+      "default_validity_days": 30,
+      "sort_order": 3,
+      "supported_model_scopes": [
+        "claude-sonnet-4"
+      ],
+      "allow_messages_dispatch": false,
+      "default_mapped_model": "claude-sonnet-4"
+    },
+    {
+      "id": 202,
+      "name": "OpenAI Quarterly Pro",
+      "description": "OpenAI subscription plan group",
+      "platform": "openai",
+      "status": "active",
+      "rate_multiplier": 0.08,
+      "subscription_type": "subscription",
+      "daily_limit_usd": 50,
+      "weekly_limit_usd": 200,
+      "monthly_limit_usd": 1200,
+      "default_validity_days": 90,
+      "sort_order": 4,
+      "supported_model_scopes": [
+        "gpt-4.1"
+      ],
+      "allow_messages_dispatch": true,
+      "default_mapped_model": "gpt-4.1"
+    }
+  ],
+  "subscriptions": [
+    {
+      "id": 1,
+      "user_id": 1001,
+      "group_id": 201,
+      "starts_at": "2026-06-19T17:10:00.283Z",
+      "expires_at": "2026-09-12T17:10:00.286Z",
+      "status": "active",
+      "daily_usage_usd": 3.2,
+      "weekly_usage_usd": 17.6,
+      "monthly_usage_usd": 58.4,
+      "daily_window_start": "2026-06-19T17:10:00.283Z",
+      "weekly_window_start": "2026-06-19T17:10:00.283Z",
+      "monthly_window_start": "2026-06-19T17:10:00.283Z",
+      "assigned_by": 9001,
+      "assigned_at": "2026-06-19T17:10:00.283Z",
+      "notes": "Seed subscription",
+      "created_at": "2026-06-19T17:10:00.283Z",
+      "updated_at": "2026-06-21T05:32:26.964Z"
+    }
+  ],
+  "redeemCodes": [
+    {
+      "id": 1,
+      "code": "s2p_cmql71btf0002okirarx34baf3c5",
+      "type": "balance",
+      "value": 10,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-19T17:19:50.139Z",
+      "notes": "sub2apipay recharge order:cmql71btf0002okirarxje9su"
+    },
+    {
+      "id": 2,
+      "code": "s2p_cmql7biv10006okir81ic167f2e1",
+      "type": "subscription",
+      "value": 29.9,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-19T17:28:58.587Z",
+      "notes": "sub2apipay subscription order:cmql7biv10006okir81i86mmh"
+    },
+    {
+      "id": 3,
+      "code": "s2p_cmqnclpt90000tmirrm0ab1d34a2",
+      "type": "balance",
+      "value": 10,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-21T05:31:13.795Z",
+      "notes": "sub2apipay recharge order:cmqnclpt90000tmirrm03ylbs"
+    },
+    {
+      "id": 4,
+      "code": "s2p_cmqncnjbu0004tmir8ga4f90de0b",
+      "type": "subscription",
+      "value": 29.9,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-21T05:32:26.964Z",
+      "notes": "sub2apipay subscription order:cmqncnjbu0004tmir8ga9kpaa"
+    },
+    {
+      "id": 5,
+      "code": "s2p_cmqnekfvc0008tmirgda42775f41",
+      "type": "balance",
+      "value": 10,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-21T06:27:56.528Z",
+      "notes": "sub2apipay recharge order:cmqnekfvc0008tmirgdavbso3"
+    },
+    {
+      "id": 6,
+      "code": "s2p_cmqnenvu6000ctmirzz0f516b43b",
+      "type": "balance",
+      "value": 110,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-21T06:28:45.411Z",
+      "notes": "sub2apipay recharge order:cmqnenvu6000ctmirzz05y3w9"
+    }
+  ],
+  "balanceLogs": [
+    {
+      "user_id": 1001,
+      "operation": "subtract",
+      "balance": 110,
+      "notes": "sub2apipay refund order:cmqnenvu6000ctmirzz05y3w9",
+      "created_at": "2026-06-21T06:29:51.067Z"
+    }
+  ],
+  "paymentSessions": [
+    {
+      "id": 1,
+      "trade_no": "MOCKPAY000001",
+      "out_trade_no": "cmql6v07u0000okirzm6n40j7",
+      "money": "10.00",
+      "type": "alipay",
+      "status": 0,
+      "created_at": "2026-06-19T17:14:26.698Z"
+    },
+    {
+      "id": 2,
+      "trade_no": "MOCKPAY000002",
+      "out_trade_no": "cmql71btf0002okirarxje9su",
+      "money": "10.00",
+      "type": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmql71btf0002okirarxje9su&access_token=1781975962819.1001.PDiRsM9U4lDCAZIK5TGpH1AqnXUin8p9K4_xwHlBny0",
+      "name": "YourPay 10.00 CNY",
+      "status": 1,
+      "created_at": "2026-06-19T17:19:23.094Z",
+      "updated_at": "2026-06-19T17:19:43.853Z"
+    },
+    {
+      "id": 3,
+      "trade_no": "MOCKPAY000003",
+      "out_trade_no": "cmql7biv10006okir81i86mmh",
+      "money": "29.90",
+      "type": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmql7biv10006okir81i86mmh&access_token=1781976437801.1001.DCjGOXp8K3rui_UY-2-DWfnaMj7_ZkaSer9fbkyPKTo",
+      "name": "Claude Pro Monthly",
+      "status": 1,
+      "created_at": "2026-06-19T17:27:17.811Z",
+      "updated_at": "2026-06-19T17:28:53.582Z"
+    },
+    {
+      "id": 4,
+      "trade_no": "MOCKPAY000004",
+      "out_trade_no": "cmqnbhr8w0000hvirorle7eu4",
+      "money": "10.00",
+      "type": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqnbhr8w0000hvirorle7eu4&access_token=1782104380330.1001.hCwj-o_YOjguMJz7mmR356icAyikaRbg_SkjkawMsMc",
+      "name": "YourPay 10.00 CNY",
+      "status": 0,
+      "created_at": "2026-06-21T04:59:40.627Z"
+    },
+    {
+      "id": 5,
+      "trade_no": "MOCKPAY000005",
+      "out_trade_no": "cmqnbj17u0002hvirxoswiub4",
+      "money": "10.00",
+      "type": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqnbj17u0002hvirxoswiub4&access_token=1782104438537.1001.QsKmpMvz5LTAtKzRitSg7x4A4qyaWsl9n8809vCqyek",
+      "name": "YourPay 10.00 CNY",
+      "status": 0,
+      "created_at": "2026-06-21T05:00:38.776Z"
+    },
+    {
+      "id": 7,
+      "trade_no": "MOCKPAY000007",
+      "out_trade_no": "VERIFY_FROM_CODEX_001",
+      "money": "1.23",
+      "type": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/payment/easypay/notify",
+      "return_url": "http://localhost:3000/pay/orders",
+      "name": "Verify Order",
+      "status": 0,
+      "created_at": "2026-06-21T05:18:46.772Z"
+    },
+    {
+      "id": 8,
+      "trade_no": "MOCKPAY000008",
+      "out_trade_no": "VERIFY_FROM_CODEX_003",
+      "money": "3.45",
+      "type": "wxpay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/payment/easypay/notify",
+      "return_url": "http://localhost:3000/pay/orders",
+      "name": "Verify Order",
+      "status": 1,
+      "created_at": "2026-06-21T05:19:59.923Z",
+      "updated_at": "2026-06-21T05:20:08.813Z"
+    },
+    {
+      "id": 9,
+      "trade_no": "MOCKPAY000009",
+      "out_trade_no": "cmqnclpt90000tmirrm03ylbs",
+      "money": "10.00",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqnclpt90000tmirrm03ylbs&access_token=1782106244747.1001.XpKVhLUw9Q8OhXcmIzIwAExJhQoT-dXG9JuMhqwLXFY",
+      "name": "YourPay 10.00 CNY",
+      "status": 1,
+      "created_at": "2026-06-21T05:30:45.028Z",
+      "updated_at": "2026-06-21T05:31:07.912Z"
+    },
+    {
+      "id": 10,
+      "trade_no": "MOCKPAY000010",
+      "out_trade_no": "cmqncnjbu0004tmir8ga9kpaa",
+      "money": "29.90",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqncnjbu0004tmir8ga9kpaa&access_token=1782106328830.1001.0q2abruhty9tYC29hIqw1jEEPMpi6nmzY-Ji9R1F9eU",
+      "name": "Claude Pro Monthly",
+      "status": 1,
+      "created_at": "2026-06-21T05:32:08.834Z",
+      "updated_at": "2026-06-21T06:27:42.360Z"
+    },
+    {
+      "id": 11,
+      "trade_no": "MOCKPAY000011",
+      "out_trade_no": "cmqnekfvc0008tmirgdavbso3",
+      "money": "10.00",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqnekfvc0008tmirgdavbso3&access_token=1782109543599.1001.oqI-8xMOcKV4fLtnTqYHWof0P0NRgakTgkUGn4A9C60",
+      "name": "YourPay 10.00 CNY",
+      "status": 1,
+      "created_at": "2026-06-21T06:25:43.867Z",
+      "updated_at": "2026-06-21T06:27:52.093Z"
+    },
+    {
+      "id": 12,
+      "trade_no": "MOCKPAY000012",
+      "out_trade_no": "cmqnenvu6000ctmirzz05y3w9",
+      "money": "110.00",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqnenvu6000ctmirzz05y3w9&access_token=1782109704660.1001.yYnFV7EX-UPAtqw_vTLhzMc9ANI-cCZWftknFtpnANA",
+      "name": "YourPay 110.00 CNY",
+      "status": -1,
+      "created_at": "2026-06-21T06:28:24.898Z",
+      "updated_at": "2026-06-21T06:29:51.374Z"
+    }
+  ],
+  "nextIds": {
+    "redeemCode": 7,
+    "subscription": 2,
+    "paymentSession": 13
+  }
+}
