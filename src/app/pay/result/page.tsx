@@ -191,6 +191,7 @@ function ResultContent() {
   const searchParams = useSearchParams();
   const outTradeNo = searchParams.get('out_trade_no') || searchParams.get('order_id');
   const accessToken = searchParams.get('access_token');
+  const appCode = searchParams.get('app_code') || undefined;
   const isPopup = searchParams.get('popup') === '1';
   const theme = searchParams.get('theme') === 'dark' ? 'dark' : 'light';
   const locale = resolveLocale(searchParams.get('lang'));
@@ -257,6 +258,9 @@ function ResultContent() {
     }
 
     const params = new URLSearchParams();
+    if (appCode) {
+      params.set('app_code', appCode);
+    }
     params.set('theme', theme);
     applyLocaleToSearchParams(params, locale);
     window.location.replace(`/pay?${params.toString()}`);

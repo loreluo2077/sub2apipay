@@ -3,6 +3,7 @@ import { queryMethodLimits } from '@/lib/order/limits';
 import { ensureDBProviders, paymentRegistry } from '@/lib/payment';
 import { getNextBizDayStartUTC } from '@/lib/time/biz-day';
 import { getCurrentUserByToken } from '@/lib/sub2api/client';
+import { resolveAppByCode } from '@/lib/app-context';
 
 /**
  * GET /api/limits?token=xxx
@@ -20,6 +21,7 @@ import { getCurrentUserByToken } from '@/lib/sub2api/client';
  */
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')?.trim();
+  const appCode = request.nextUrl.searchParams.get('app_code');
   if (!token) {
     return NextResponse.json({ error: 'token is required' }, { status: 400 });
   }
@@ -30,10 +32,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  await ensureDBProviders();
-  const types = paymentRegistry.getSupportedTypes();
-  const methods = await queryMethodLimits(types);
-  const resetAt = getNextBizDayStartUTC();
+  try {
+    const app = await resolveAppByCode(appCode);
+    await ensureDBProviders();
+    const types = paymentRegistry.getSupportedTypes();
+    const methods = await queryMethodLimits(types, { appId: app.id });
+    const resetAt = getNextBizDayStartUTC();
 
-  return NextResponse.json({ methods, resetAt });
+    return NextResponse.json({ methods, resetAt });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
+    throw error;
+  }
 }

@@ -78,13 +78,14 @@ async function filterByDailyLimits(
  * Returns the instance ID and decrypted config.
  */
 export async function selectInstance(
+  appId: string,
   providerKey: string,
   strategy: LoadBalanceStrategy = 'round-robin',
   paymentType?: string,
   amount?: number,
 ): Promise<{ instanceId: string; config: Record<string, string> } | null> {
   const allInstances = await prisma.paymentProviderInstance.findMany({
-    where: { providerKey, enabled: true },
+    where: { appId, providerKey, enabled: true },
     orderBy: { sortOrder: 'asc' },
   });
 
@@ -144,9 +145,10 @@ export async function selectInstance(
   }
 
   // Round-robin
-  const counter = rrCounters.get(providerKey) ?? 0;
+  const counterKey = `${appId}:${providerKey}`;
+  const counter = rrCounters.get(counterKey) ?? 0;
   const selected = instances[counter % instances.length];
-  rrCounters.set(providerKey, counter + 1);
+  rrCounters.set(counterKey, counter + 1);
   return { instanceId: selected.id, config: JSON.parse(decrypt(selected.config)) };
 }
 

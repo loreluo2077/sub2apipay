@@ -5,7 +5,7 @@
       "username": "demo-user",
       "email": "demo-user@example.com",
       "status": "active",
-      "balance": 158.5,
+      "balance": 170.84,
       "notes": "Primary demo account",
       "role": "user",
       "token": "mock-user-token"
@@ -127,7 +127,7 @@
       "user_id": 1001,
       "group_id": 201,
       "starts_at": "2026-06-19T17:10:00.283Z",
-      "expires_at": "2026-09-12T17:10:00.286Z",
+      "expires_at": "2026-10-12T17:10:00.286Z",
       "status": "active",
       "daily_usage_usd": 3.2,
       "weekly_usage_usd": 17.6,
@@ -139,7 +139,7 @@
       "assigned_at": "2026-06-19T17:10:00.283Z",
       "notes": "Seed subscription",
       "created_at": "2026-06-19T17:10:00.283Z",
-      "updated_at": "2026-06-21T05:32:26.964Z"
+      "updated_at": "2026-06-21T18:06:39.325Z"
     }
   ],
   "redeemCodes": [
@@ -202,6 +202,26 @@
       "used_by": 1001,
       "used_at": "2026-06-21T06:28:45.411Z",
       "notes": "sub2apipay recharge order:cmqnenvu6000ctmirzz05y3w9"
+    },
+    {
+      "id": 7,
+      "code": "s2p_cmqo3lbtu0004hjirfo471b1c4d7",
+      "type": "balance",
+      "value": 12.34,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-21T18:06:22.597Z",
+      "notes": "sub2apipay recharge order:cmqo3lbtu0004hjirfo4ovmud"
+    },
+    {
+      "id": 8,
+      "code": "s2p_cmqo3lse20008hjiro9y9cd63f63",
+      "type": "subscription",
+      "value": 19.9,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-21T18:06:39.325Z",
+      "notes": "sub2apipay subscription order:cmqo3lse20008hjiro9y5lgdd"
     }
   ],
   "balanceLogs": [
@@ -364,11 +384,41 @@
       "status": -1,
       "created_at": "2026-06-21T06:28:24.898Z",
       "updated_at": "2026-06-21T06:29:51.374Z"
+    },
+    {
+      "id": 13,
+      "trade_no": "MOCKPAY000013",
+      "out_trade_no": "cmqo3lbtu0004hjirfo4ovmud",
+      "money": "12.34",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqo3lbtu0004hjirfo4ovmud&access_token=1782151574530.1001.loRootsy9V4T3GwN7ChJLFa6tt6iAN38pxwwWCpNzSw&app_code=e2e_mqo3l1sc",
+      "name": "Sub2API 12.34 CNY",
+      "status": 1,
+      "created_at": "2026-06-21T18:06:14.789Z",
+      "updated_at": "2026-06-21T18:06:15.299Z"
+    },
+    {
+      "id": 14,
+      "trade_no": "MOCKPAY000014",
+      "out_trade_no": "cmqo3lse20008hjiro9y5lgdd",
+      "money": "19.90",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqo3lse20008hjiro9y5lgdd&access_token=1782151596317.1001.FpJymjd66_zV02qha-ExlZSee2HCgSzyCibipimbk9U&app_code=e2e_mqo3l1sc",
+      "name": "E2E Product e2e_mqo3l1sc",
+      "status": 1,
+      "created_at": "2026-06-21T18:06:36.324Z",
+      "updated_at": "2026-06-21T18:06:36.767Z"
     }
   ],
   "nextIds": {
-    "redeemCode": 7,
+    "redeemCode": 9,
     "subscription": 2,
-    "paymentSession": 13
+    "paymentSession": 15
   }
 }

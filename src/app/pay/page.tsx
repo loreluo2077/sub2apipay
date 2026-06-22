@@ -53,6 +53,7 @@ function PayContent() {
   const theme = searchParams.get('theme') === 'dark' ? 'dark' : 'light';
   const uiMode = searchParams.get('ui_mode') || 'standalone';
   const tab = searchParams.get('tab');
+  const appCode = searchParams.get('app_code') || undefined;
   const srcHost = searchParams.get('src_host') || undefined;
   const srcUrl = searchParams.get('src_url') || undefined;
   const locale = resolveLocale(searchParams.get('lang'));
@@ -164,7 +165,9 @@ function PayContent() {
     if (!token) return;
     setUserNotFound(false);
     try {
-      const meRes = await fetch(`/api/orders/my?token=${encodeURIComponent(token)}`);
+      const meParams = new URLSearchParams({ token });
+      if (appCode) meParams.set('app_code', appCode);
+      const meRes = await fetch(`/api/orders/my?${meParams.toString()}`);
       if (!meRes.ok) {
         setUserNotFound(true);
         return;
@@ -200,7 +203,12 @@ function PayContent() {
         setOrdersHasMore(false);
       }
 
-      const cfgRes = await fetch(`/api/user?user_id=${meId}&token=${encodeURIComponent(token)}`);
+      const cfgParams = new URLSearchParams({
+        user_id: String(meId),
+        token,
+      });
+      if (appCode) cfgParams.set('app_code', appCode);
+      const cfgRes = await fetch(`/api/user?${cfgParams.toString()}`);
       if (cfgRes.ok) {
         const cfgData = await cfgRes.json();
         if (cfgData.config) {
@@ -225,16 +233,19 @@ function PayContent() {
     } finally {
       setUserLoaded(true);
     }
-  }, [token, locale]);
+  }, [token, locale, appCode]);
 
   // 加载渠道和订阅套餐
   const loadChannelsAndPlans = useCallback(async () => {
     if (!token) return;
     try {
+      const baseParams = new URLSearchParams({ token });
+      if (appCode) baseParams.set('app_code', appCode);
+      const query = baseParams.toString();
       const [chRes, plRes, subRes] = await Promise.all([
-        fetch(`/api/channels?token=${encodeURIComponent(token)}`),
-        fetch(`/api/subscription-plans?token=${encodeURIComponent(token)}`),
-        fetch(`/api/subscriptions/my?token=${encodeURIComponent(token)}`),
+        fetch(`/api/channels?${query}`),
+        fetch(`/api/subscription-plans?${query}`),
+        fetch(`/api/subscriptions/my?${query}`),
       ]);
 
       if (chRes.ok) {
@@ -253,14 +264,20 @@ function PayContent() {
     } finally {
       setChannelsLoaded(true);
     }
-  }, [token]);
+  }, [token, appCode]);
 
   const loadMoreOrders = async () => {
     if (!token || ordersLoadingMore || !ordersHasMore) return;
     const nextPage = ordersPage + 1;
     setOrdersLoadingMore(true);
     try {
-      const res = await fetch(`/api/orders/my?token=${encodeURIComponent(token)}&page=${nextPage}&page_size=20`);
+      const params = new URLSearchParams({
+        token,
+        page: String(nextPage),
+        page_size: '20',
+      });
+      if (appCode) params.set('app_code', appCode);
+      const res = await fetch(`/api/orders/my?${params.toString()}`);
       if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data.orders) && data.orders.length > 0) {
@@ -348,6 +365,7 @@ function PayContent() {
   const buildScopedUrl = (path: string, forceOrdersTab = false) => {
     const params = new URLSearchParams();
     if (token) params.set('token', token);
+    if (appCode) params.set('app_code', appCode);
     params.set('theme', theme);
     params.set('ui_mode', uiMode);
     if (forceOrdersTab) params.set('tab', 'orders');
@@ -382,6 +400,7 @@ function PayContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          app_code: appCode,
           token,
           amount,
           payment_type: paymentType,
@@ -475,6 +494,7 @@ function PayContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          app_code: appCode,
           token,
           amount: selectedPlan.price,
           payment_type: paymentType,

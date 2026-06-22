@@ -202,6 +202,7 @@ function ChannelsContent() {
   const token = searchParams.get('token') || '';
   const theme = searchParams.get('theme') === 'dark' ? 'dark' : 'light';
   const uiMode = searchParams.get('ui_mode') || 'standalone';
+  const appCode = searchParams.get('app_code') || '';
   const locale = resolveLocale(searchParams.get('lang'));
   const isDark = theme === 'dark';
   const isEmbedded = uiMode === 'embedded';
@@ -230,7 +231,9 @@ function ChannelsContent() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/channels?token=${encodeURIComponent(token)}`);
+      const query = new URLSearchParams({ token });
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/channels?${query.toString()}`);
       if (!res.ok) {
         if (res.status === 401) {
           setError(t.invalidToken);
@@ -245,7 +248,7 @@ function ChannelsContent() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, appCode]);
 
   useEffect(() => {
     fetchChannels();
@@ -315,7 +318,8 @@ function ChannelsContent() {
     }
 
     try {
-      const url = editingChannel ? `/api/admin/channels/${editingChannel.id}` : '/api/admin/channels';
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const url = editingChannel ? `/api/admin/channels/${editingChannel.id}${appQuery}` : `/api/admin/channels${appQuery}`;
       const method = editingChannel ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -347,7 +351,8 @@ function ChannelsContent() {
   const handleDelete = async (channel: Channel) => {
     if (!confirm(t.deleteConfirm)) return;
     try {
-      const res = await fetch(`/api/admin/channels/${channel.id}`, {
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const res = await fetch(`/api/admin/channels/${channel.id}${appQuery}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -366,7 +371,8 @@ function ChannelsContent() {
 
   const handleToggleEnabled = async (channel: Channel) => {
     try {
-      const res = await fetch(`/api/admin/channels/${channel.id}`, {
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const res = await fetch(`/api/admin/channels/${channel.id}${appQuery}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -429,7 +435,8 @@ function ChannelsContent() {
       if (!group) continue;
 
       try {
-        const res = await fetch('/api/admin/channels', {
+        const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+        const res = await fetch(`/api/admin/channels${appQuery}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -39,8 +39,8 @@ function buildAppUrl(pathname = '/'): string {
   return new URL(pathname, getEnv().NEXT_PUBLIC_APP_URL).toString();
 }
 
-function buildResultUrl(orderId: string): string {
-  return buildOrderResultUrl(getEnv().NEXT_PUBLIC_APP_URL, orderId);
+function buildResultUrl(orderId: string, appCode?: string | null): string {
+  return buildOrderResultUrl(getEnv().NEXT_PUBLIC_APP_URL, orderId, undefined, appCode ?? undefined);
 }
 
 function serializeScriptString(value: string): string {
@@ -193,7 +193,7 @@ function renderErrorPage(title: string, message: string, orderId?: string, statu
   });
 }
 
-function renderStatusPage(order: ShortLinkOrderStatus): NextResponse {
+function renderStatusPage(order: ShortLinkOrderStatus, appCode?: string | null): NextResponse {
   const display = getStatusDisplay(order);
   const html = renderHtml(
     display.label,
@@ -202,7 +202,7 @@ function renderStatusPage(order: ShortLinkOrderStatus): NextResponse {
       <h1>${escapeHtml(display.label)}</h1>
       <p>${escapeHtml(display.message)}</p>
       <div class="order">订单号：${escapeHtml(order.id)}</div>
-      <a class="button secondary" href="${escapeHtml(buildResultUrl(order.id))}">查看订单结果</a>
+      <a class="button secondary" href="${escapeHtml(buildResultUrl(order.id, appCode))}">查看订单结果</a>
     </main>`,
   );
 
@@ -214,7 +214,7 @@ function renderStatusPage(order: ShortLinkOrderStatus): NextResponse {
   });
 }
 
-function renderRedirectPage(orderId: string, payUrl: string): NextResponse {
+function renderRedirectPage(orderId: string, payUrl: string, appCode?: string | null): NextResponse {
   const html = renderHtml(
     '正在跳转支付宝',
     `<main class="card">
@@ -224,7 +224,7 @@ function renderRedirectPage(orderId: string, payUrl: string): NextResponse {
       <div class="spinner"></div>
       <div class="order">订单号：${escapeHtml(orderId)}</div>
       <p class="hint">如未自动拉起支付宝，请返回原充值页后重新发起支付。</p>
-      <a class="text-link" href="${escapeHtml(buildResultUrl(orderId))}">已支付？查看订单结果</a>
+      <a class="text-link" href="${escapeHtml(buildResultUrl(orderId, appCode))}">已支付？查看订单结果</a>
       <script>
         const payUrl = ${serializeScriptString(payUrl)};
         window.location.replace(payUrl);
@@ -253,6 +253,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { id: orderId },
     select: {
       id: true,
+      app: { select: { code: true } },
       amount: true,
       payAmount: true,
       paymentType: true,
@@ -275,7 +276,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   if (order.status !== ORDER_STATUS.PENDING) {
-    return renderStatusPage(order);
+    return renderStatusPage(order, order.app?.code);
   }
 
   if (order.expiresAt.getTime() <= Date.now()) {
@@ -284,7 +285,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       status: ORDER_STATUS.EXPIRED,
       paidAt: order.paidAt,
       completedAt: order.completedAt,
-    });
+    }, order.app?.code);
   }
 
   const payAmount = Number(order.payAmount ?? order.amount);
@@ -313,9 +314,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     amount: payAmount,
     subject,
     notifyUrl: env.ALIPAY_NOTIFY_URL,
-    returnUrl: isAlipayAppRequest(request) ? null : buildResultUrl(order.id),
+    returnUrl: isAlipayAppRequest(request) ? null : buildResultUrl(order.id, order.app?.code),
     isMobile: isMobileRequest(request),
   });
 
-  return renderRedirectPage(order.id, payUrl);
+  return renderRedirectPage(order.id, payUrl, order.app?.code);
 }

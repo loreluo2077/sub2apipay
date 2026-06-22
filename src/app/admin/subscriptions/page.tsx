@@ -311,6 +311,7 @@ function SubscriptionsContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token') || '';
   const theme = searchParams.get('theme') === 'dark' ? 'dark' : 'light';
+  const appCode = searchParams.get('app_code') || '';
   const locale = resolveLocale(searchParams.get('lang'));
   const isDark = theme === 'dark';
   const uiMode = searchParams.get('ui_mode') || 'standalone';
@@ -361,7 +362,9 @@ function SubscriptionsContent() {
     if (!token) return;
     setPlansLoading(true);
     try {
-      const res = await fetch(`/api/admin/subscription-plans?token=${encodeURIComponent(token)}`);
+      const query = new URLSearchParams({ token });
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/subscription-plans?${query.toString()}`);
       if (!res.ok) {
         if (res.status === 401) {
           setError(t.invalidToken);
@@ -376,7 +379,7 @@ function SubscriptionsContent() {
     } finally {
       setPlansLoading(false);
     }
-  }, [token]);
+  }, [token, appCode]);
 
   /* --- fetch groups --- */
   const fetchGroups = useCallback(async () => {
@@ -464,7 +467,10 @@ function SubscriptionsContent() {
       product_name: formProductName.trim() || null,
     };
     try {
-      const url = editingPlan ? `/api/admin/subscription-plans/${editingPlan.id}` : '/api/admin/subscription-plans';
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const url = editingPlan
+        ? `/api/admin/subscription-plans/${editingPlan.id}${appQuery}`
+        : `/api/admin/subscription-plans${appQuery}`;
       const method = editingPlan ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
@@ -493,7 +499,8 @@ function SubscriptionsContent() {
   const handleDelete = async (plan: SubscriptionPlan) => {
     if (!confirm(t.deleteConfirm)) return;
     try {
-      const res = await fetch(`/api/admin/subscription-plans/${plan.id}`, {
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const res = await fetch(`/api/admin/subscription-plans/${plan.id}${appQuery}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -510,7 +517,8 @@ function SubscriptionsContent() {
   /* --- toggle plan enabled --- */
   const handleToggleEnabled = async (plan: SubscriptionPlan) => {
     try {
-      const res = await fetch(`/api/admin/subscription-plans/${plan.id}`, {
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const res = await fetch(`/api/admin/subscription-plans/${plan.id}${appQuery}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -1,43 +1,117 @@
 'use client';
 
-import { useSearchParams, usePathname } from 'next/navigation';
-import { Suspense } from 'react';
+import { useSearchParams, usePathname, useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { resolveLocale } from '@/lib/locale';
 
 const NAV_ITEMS = [
   { path: '/admin', label: { zh: '数据概览', en: 'Dashboard' } },
+  { path: '/admin/apps', label: { zh: '业务应用', en: 'Apps' } },
   { path: '/admin/orders', label: { zh: '订单管理', en: 'Orders' } },
   { path: '/admin/payment-config', label: { zh: '支付配置', en: 'Payment Config' } },
   { path: '/admin/channels', label: { zh: '渠道管理', en: 'Channels' } },
   { path: '/admin/subscriptions', label: { zh: '订阅管理', en: 'Subscriptions' } },
 ];
 
+interface AdminApp {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+}
+
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const router = useRouter();
   const token = searchParams.get('token') || '';
   const theme = searchParams.get('theme') || 'light';
   const uiMode = searchParams.get('ui_mode') || 'standalone';
+  const appCode = searchParams.get('app_code') || '';
   const locale = resolveLocale(searchParams.get('lang'));
   const isDark = theme === 'dark';
+  const [apps, setApps] = useState<AdminApp[]>([]);
+  const [currentAppCode, setCurrentAppCode] = useState(appCode);
 
-  const buildUrl = (path: string) => {
-    const params = new URLSearchParams();
-    if (token) params.set('token', token);
-    params.set('theme', theme);
-    params.set('ui_mode', uiMode);
-    if (locale !== 'zh') params.set('lang', locale);
-    return `${path}?${params.toString()}`;
-  };
+  const buildUrl = useCallback(
+    (path: string, nextAppCode = currentAppCode || appCode) => {
+      const params = new URLSearchParams();
+      if (token) params.set('token', token);
+      params.set('theme', theme);
+      params.set('ui_mode', uiMode);
+      if (nextAppCode) params.set('app_code', nextAppCode);
+      if (locale !== 'zh') params.set('lang', locale);
+      return `${path}?${params.toString()}`;
+    },
+    [appCode, currentAppCode, locale, theme, token, uiMode],
+  );
+
+  useEffect(() => {
+    setCurrentAppCode(appCode);
+  }, [appCode]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+
+    const loadApps = async () => {
+      try {
+        const res = await fetch(`/api/admin/apps?token=${encodeURIComponent(token)}${appCode ? `&app_code=${encodeURIComponent(appCode)}` : ''}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setApps(data.apps ?? []);
+        if (data.currentApp?.code) {
+          setCurrentAppCode(data.currentApp.code);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    loadApps();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, appCode]);
 
   const isActive = (navPath: string) => {
     if (navPath === '/admin') return pathname === '/admin' || pathname === '/admin/dashboard';
     return pathname.startsWith(navPath);
   };
 
+  const handleAppChange = (nextCode: string) => {
+    setCurrentAppCode(nextCode);
+    router.replace(buildUrl(pathname, nextCode));
+  };
+
   return (
     <div data-theme={theme} className={['min-h-screen', isDark ? 'bg-slate-950' : 'bg-slate-100'].join(' ')}>
       <div className="px-2 pt-2 sm:px-3 sm:pt-3">
+        <div
+          className={[
+            'mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2',
+            isDark ? 'border-slate-700 bg-slate-800/70' : 'border-slate-200 bg-white/90',
+          ].join(' ')}
+        >
+          <div className={['text-xs font-medium', isDark ? 'text-slate-400' : 'text-slate-500'].join(' ')}>
+            {locale === 'en' ? 'Current App' : '当前业务应用'}
+          </div>
+          <select
+            value={currentAppCode}
+            onChange={(e) => handleAppChange(e.target.value)}
+            className={[
+              'min-w-[220px] rounded-lg border px-3 py-1.5 text-sm',
+              isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-300 bg-white text-slate-900',
+            ].join(' ')}
+          >
+            {apps.map((app) => (
+              <option key={app.id} value={app.code}>
+                {app.name} ({app.code})
+              </option>
+            ))}
+          </select>
+        </div>
         <nav
           className={[
             'mb-1 flex flex-wrap gap-1 rounded-xl border p-1',

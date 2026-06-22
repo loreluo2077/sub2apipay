@@ -23,6 +23,7 @@ import { getBizDayStartUTC } from '@/lib/time/biz-day';
 import { buildOrderResultUrl, createOrderStatusAccessToken } from '@/lib/order/status-access';
 import { getSystemConfig, getSystemConfigs } from '@/lib/system-config';
 import { selectInstance, getInstanceConfig, type LoadBalanceStrategy } from '@/lib/payment/load-balancer';
+import { resolveAppByCode } from '@/lib/app-context';
 
 const DEFAULT_MAX_PENDING_ORDERS = 3;
 /** Decimal(10,2) 允许的最大金额 */
@@ -33,6 +34,7 @@ function message(locale: Locale, zh: string, en: string): string {
 }
 
 export interface CreateOrderInput {
+  appCode?: string;
   userId: number;
   amount: number;
   paymentType: PaymentType;
@@ -67,6 +69,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const locale = input.locale ?? 'zh';
   const todayStart = getBizDayStartUTC();
   const orderType = input.orderType ?? 'balance';
+  const app = await resolveAppByCode(input.appCode);
 
   // ── 订阅订单前置校验 ──
   let subscriptionPlan: {
@@ -100,7 +103,12 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         400,
       );
     }
-    const plan = await prisma.subscriptionPlan.findUnique({ where: { id: input.planId } });
+    const plan = await prisma.subscriptionPlan.findFirst({
+      where: {
+        id: input.planId,
+        appId: app.id,
+      },
+    });
     if (!plan || !plan.forSale) {
       throw new OrderError(
         'PLAN_NOT_AVAILABLE',
@@ -338,8 +346,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         userName: user.username,
         userNotes: user.notes || null,
         amount: new Prisma.Decimal(input.amount.toFixed(2)),
+        appId: app.id,
         payAmount: new Prisma.Decimal(payAmountStr),
         feeRate: feeRate > 0 ? new Prisma.Decimal(feeRate.toFixed(4)) : null,
+        bizOrderId: null,
+        bizUserId: String(input.userId),
         rechargeCode: '',
         status: 'PENDING',
         paymentType: input.paymentType,
@@ -376,7 +387,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const strategyConfig = await getSystemConfig('LOAD_BALANCE_STRATEGY');
     const strategy = (strategyConfig === 'least-amount' ? 'least-amount' : 'round-robin') as LoadBalanceStrategy;
 
-    const instanceResult = await selectInstance(provider.providerKey, strategy, input.paymentType, input.amount);
+    const instanceResult = await selectInstance(app.id, provider.providerKey, strategy, input.paymentType, input.amount);
     if (instanceResult) {
       if (provider.providerKey === 'easypay') {
         const { EasyPayProvider } = await import('@/lib/easy-pay/provider');
@@ -389,7 +400,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     } else {
       // 检查是否有配置的实例但全部被限额过滤掉
       const instanceCount = await prisma.paymentProviderInstance.count({
-        where: { providerKey: provider.providerKey, enabled: true },
+        where: { appId: app.id, providerKey: provider.providerKey, enabled: true },
       });
       if (instanceCount > 0) {
         throw new OrderError(
@@ -405,7 +416,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     }
 
     const statusAccessToken = createOrderStatusAccessToken(order.id, input.userId);
-    const orderResultUrl = buildOrderResultUrl(env.NEXT_PUBLIC_APP_URL, order.id, input.userId);
+    const orderResultUrl = buildOrderResultUrl(env.NEXT_PUBLIC_APP_URL, order.id, input.userId, app.code);
 
     // 只有 easypay 从外部传入 notifyUrl，return_url 统一回到带访问令牌的结果页
     let notifyUrl: string | undefined;

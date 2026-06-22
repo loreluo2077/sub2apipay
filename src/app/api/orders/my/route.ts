@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUserByToken } from '@/lib/sub2api/client';
 import { deriveOrderState, isRechargeRetryable } from '@/lib/order/status';
+import { resolveAppByCode } from '@/lib/app-context';
 
 const VALID_PAGE_SIZES = [20, 50, 100];
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const token = searchParams.get('token')?.trim();
+  const appCode = searchParams.get('app_code');
   if (!token) {
     return NextResponse.json({ error: 'token is required' }, { status: 400 });
   }
@@ -25,7 +27,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const where = { userId: user.id };
+    const app = await resolveAppByCode(appCode);
+    const where = { userId: user.id, appId: app.id };
 
     const [orders, total, statusGroups] = await Promise.all([
       prisma.order.findMany({
@@ -108,6 +111,9 @@ export async function GET(request: NextRequest) {
       total_pages: Math.ceil(total / pageSize),
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Get my orders error:', error);
     return NextResponse.json({ error: '获取订单失败' }, { status: 500 });
   }

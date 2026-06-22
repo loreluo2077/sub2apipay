@@ -6,9 +6,30 @@ datasource db {
   provider = "postgresql"
 }
 
+model App {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orders                   Order[]
+  channels                 Channel[]
+  subscriptionPlans        SubscriptionPlan[]
+  paymentProviderInstances PaymentProviderInstance[]
+
+  @@index([status])
+  @@map("apps")
+}
+
 model Order {
   id            String      @id @default(cuid())
+  appId         String      @map("app_id")
+  app           App         @relation(fields: [appId], references: [id])
   userId        Int         @map("user_id")
+  bizOrderId    String?     @map("biz_order_id")
+  bizUserId     String?     @map("biz_user_id")
   userEmail     String?     @map("user_email")
   userName      String?     @map("user_name")
   userNotes     String?     @map("user_notes")
@@ -53,7 +74,9 @@ model Order {
 
   auditLogs     AuditLog[]
 
+  @@index([appId])
   @@index([userId])
+  @@index([bizOrderId])
   @@index([status])
   @@index([expiresAt])
   @@index([createdAt])
@@ -95,6 +118,8 @@ model AuditLog {
 // ── 渠道展示配置 ──
 model Channel {
   id             String   @id @default(cuid())
+  appId          String   @map("app_id")
+  app            App      @relation(fields: [appId], references: [id])
   groupId        Int?     @unique @map("group_id")
   name           String
   platform       String   @default("claude")
@@ -107,6 +132,7 @@ model Channel {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  @@index([appId])
   @@index([sortOrder])
   @@map("channels")
 }
@@ -114,6 +140,8 @@ model Channel {
 // ── 订阅套餐配置 ──
 model SubscriptionPlan {
   id            String   @id @default(cuid())
+  appId         String   @map("app_id")
+  app           App      @relation(fields: [appId], references: [id])
   groupId       Int?     @map("group_id")
   name          String
   description   String?  @db.Text
@@ -130,6 +158,7 @@ model SubscriptionPlan {
 
   orders        Order[]
 
+  @@index([appId])
   @@index([forSale, sortOrder])
   @@map("subscription_plans")
 }
@@ -149,6 +178,8 @@ model SystemConfig {
 // ── 支付服务商实例（多实例轮询） ──
 model PaymentProviderInstance {
   id             String   @id @default(cuid())
+  appId          String   @map("app_id")
+  app            App      @relation(fields: [appId], references: [id])
   providerKey    String   @map("provider_key") // easypay, alipay, wxpay, stripe
   name           String   // display name like "易支付A"
   config         String   @db.Text // encrypted JSON credentials
@@ -160,7 +191,8 @@ model PaymentProviderInstance {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  @@index([appId])
   @@index([providerKey])
-  @@index([providerKey, enabled])
+  @@index([appId, providerKey, enabled])
   @@map("payment_provider_instances")
 }

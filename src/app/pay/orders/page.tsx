@@ -24,6 +24,7 @@ function OrdersContent() {
   const token = (searchParams.get('token') || '').trim();
   const theme = searchParams.get('theme') === 'dark' ? 'dark' : 'light';
   const uiMode = searchParams.get('ui_mode') || 'standalone';
+  const appCode = searchParams.get('app_code') || undefined;
   const srcHost = searchParams.get('src_host') || '';
   const locale = resolveLocale(searchParams.get('lang'));
   const isDark = theme === 'dark';
@@ -71,12 +72,14 @@ function OrdersContent() {
     if (!isMobile || isEmbedded || typeof window === 'undefined') return;
     const params = new URLSearchParams();
     if (token) params.set('token', token);
+    if (appCode) params.set('app_code', appCode);
     params.set('theme', theme);
     params.set('ui_mode', uiMode);
+    if (srcHost) params.set('src_host', srcHost);
     params.set('tab', 'orders');
     applyLocaleToSearchParams(params, locale);
     window.location.replace(`/pay?${params.toString()}`);
-  }, [isMobile, isEmbedded, token, theme, uiMode, locale]);
+  }, [isMobile, isEmbedded, token, theme, uiMode, locale, appCode, srcHost]);
 
   const loadOrders = async (targetPage = page, targetPageSize = pageSize) => {
     setLoading(true);
@@ -93,6 +96,7 @@ function OrdersContent() {
         page: String(targetPage),
         page_size: String(targetPageSize),
       });
+      if (appCode) params.set('app_code', appCode);
       const res = await fetch(`/api/orders/my?${params}`);
       if (!res.ok) {
         setError(res.status === 401 ? text.sessionExpired : text.loadFailed);
@@ -129,7 +133,7 @@ function OrdersContent() {
   useEffect(() => {
     if (isMobile && !isEmbedded) return;
     loadOrders(1, pageSize);
-  }, [token, isMobile, isEmbedded]);
+  }, [token, isMobile, isEmbedded, appCode]);
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
@@ -144,6 +148,7 @@ function OrdersContent() {
 
   const handleRefundRequest = async (orderId: string, amount: number, reason: string) => {
     const params = new URLSearchParams({ token });
+    if (appCode) params.set('app_code', appCode);
     applyLocaleToSearchParams(params, locale);
     const res = await fetch(`/api/orders/${orderId}/refund-request?${params.toString()}`, {
       method: 'POST',
@@ -188,6 +193,7 @@ function OrdersContent() {
   const buildScopedUrl = (path: string) => {
     const params = new URLSearchParams();
     if (token) params.set('token', token);
+    if (appCode) params.set('app_code', appCode);
     params.set('theme', theme);
     params.set('ui_mode', uiMode);
     applyLocaleToSearchParams(params, locale);

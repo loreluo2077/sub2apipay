@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockGetCurrentUserByToken = vi.fn();
+const mockResolveAppByCode = vi.fn();
 
 vi.mock('@/lib/sub2api/client', () => ({
   getCurrentUserByToken: (...args: unknown[]) => mockGetCurrentUserByToken(...args),
+}));
+
+vi.mock('@/lib/app-context', () => ({
+  resolveAppByCode: (...args: unknown[]) => mockResolveAppByCode(...args),
 }));
 
 const mockOrderFindMany = vi.fn();
@@ -50,6 +55,7 @@ describe('GET /api/orders/my - canRefundRequest', () => {
       email: 'test@example.com',
       balance: 100,
     });
+    mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
     mockOrderCount.mockResolvedValue(0);
     mockOrderGroupBy.mockResolvedValue([]);
     mockOrderFindMany.mockResolvedValue([]);
@@ -89,6 +95,7 @@ describe('GET /api/orders/my - canRefundRequest', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
+    expect(mockOrderFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 1, appId: 'app_default' } }));
     expect(data.orders[0].canRefundRequest).toBe(true);
   });
 
@@ -261,5 +268,13 @@ describe('GET /api/orders/my - canRefundRequest', () => {
     expect(data.orders[0].canRefundRequest).toBe(true); // balance + COMPLETED + refundEnabled
     expect(data.orders[1].canRefundRequest).toBe(false); // subscription
     expect(data.orders[2].canRefundRequest).toBe(false); // PENDING
+  });
+
+  it('returns 404 when app does not exist', async () => {
+    mockResolveAppByCode.mockRejectedValue(new Error('APP_NOT_FOUND'));
+
+    const res = await GET(createRequest({ app_code: 'missing-app' }));
+
+    expect(res.status).toBe(404);
   });
 });

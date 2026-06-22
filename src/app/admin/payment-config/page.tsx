@@ -239,6 +239,7 @@ function PaymentConfigContent() {
   const token = searchParams.get('token') || '';
   const theme = searchParams.get('theme') === 'dark' ? 'dark' : 'light';
   const uiMode = searchParams.get('ui_mode') || 'standalone';
+  const appCode = searchParams.get('app_code') || '';
   const locale = resolveLocale(searchParams.get('lang'));
   const isDark = theme === 'dark';
   const isEmbedded = uiMode === 'embedded';
@@ -339,7 +340,9 @@ function PaymentConfigContent() {
   const fetchInstances = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch(`/api/admin/provider-instances?token=${encodeURIComponent(token)}`);
+      const query = new URLSearchParams({ token });
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/provider-instances?${query.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setInstances(data.instances ?? []);
@@ -347,7 +350,7 @@ function PaymentConfigContent() {
     } catch {
       /* ignore */
     }
-  }, [token]);
+  }, [token, appCode]);
 
   useEffect(() => {
     fetchConfig();
@@ -386,7 +389,8 @@ function PaymentConfigContent() {
               supportedTypes: string;
             };
             try {
-              const instRes = await fetch('/api/admin/provider-instances', {
+              const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+              const instRes = await fetch(`/api/admin/provider-instances${appQuery}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ providerKey, name, config, supportedTypes, enabled: true, sortOrder: 0 }),
@@ -439,8 +443,8 @@ function PaymentConfigContent() {
     setError('');
     try {
       const url = editingInstance
-        ? `/api/admin/provider-instances/${editingInstance.id}`
-        : '/api/admin/provider-instances';
+        ? `/api/admin/provider-instances/${editingInstance.id}${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`
+        : `/api/admin/provider-instances${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`;
       const res = await fetch(url, {
         method: editingInstance ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -473,7 +477,8 @@ function PaymentConfigContent() {
   const handleDeleteInstance = async (id: string) => {
     if (!confirm(t.deleteInstanceConfirm)) return;
     try {
-      const res = await fetch(`/api/admin/provider-instances/${id}`, {
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const res = await fetch(`/api/admin/provider-instances/${id}${appQuery}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -523,7 +528,8 @@ function PaymentConfigContent() {
 
   const toggleInstanceEnabled = async (inst: ProviderInstanceData) => {
     try {
-      const res = await fetch(`/api/admin/provider-instances/${inst.id}`, {
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const res = await fetch(`/api/admin/provider-instances/${inst.id}${appQuery}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ enabled: !inst.enabled }),
@@ -541,7 +547,8 @@ function PaymentConfigContent() {
 
   const toggleInstanceRefundEnabled = async (inst: ProviderInstanceData) => {
     try {
-      const res = await fetch(`/api/admin/provider-instances/${inst.id}`, {
+      const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
+      const res = await fetch(`/api/admin/provider-instances/${inst.id}${appQuery}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ refundEnabled: !inst.refundEnabled }),

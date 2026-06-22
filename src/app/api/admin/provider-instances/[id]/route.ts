@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { encrypt, decrypt } from '@/lib/crypto';
+import { resolveAppByCode } from '@/lib/app-context';
 
 const SENSITIVE_PATTERNS = ['key', 'pkey', 'secret', 'private', 'password'];
 const VALID_PROVIDERS = ['easypay', 'alipay', 'wxpay', 'stripe'];
@@ -76,7 +77,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params;
-    const instance = await prisma.paymentProviderInstance.findUnique({ where: { id } });
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
+    const instance = await prisma.paymentProviderInstance.findFirst({ where: { id, appId: app.id } });
     if (!instance) return NextResponse.json({ error: '支付实例不存在' }, { status: 404 });
 
     return NextResponse.json({
@@ -85,6 +88,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       limits: instance.limits ? JSON.parse(instance.limits) : null,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to get provider instance:', error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: '获取支付实例失败' }, { status: 500 });
   }
@@ -96,10 +102,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params;
+    const appCode = request.nextUrl.searchParams.get('app_code');
     const body = await request.json();
     const { providerKey, name, config, enabled, sortOrder, supportedTypes, limits, refundEnabled } = body;
 
-    const existing = await prisma.paymentProviderInstance.findUnique({ where: { id } });
+    const app = await resolveAppByCode(appCode);
+    const existing = await prisma.paymentProviderInstance.findFirst({ where: { id, appId: app.id } });
     if (!existing) return NextResponse.json({ error: '支付实例不存在' }, { status: 404 });
 
     const data: Record<string, unknown> = {};
@@ -161,6 +169,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       limits: updated.limits ? JSON.parse(updated.limits) : null,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to update provider instance:', error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: '更新支付实例失败' }, { status: 500 });
   }
@@ -172,7 +183,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   try {
     const { id } = await params;
-    const existing = await prisma.paymentProviderInstance.findUnique({ where: { id } });
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
+    const existing = await prisma.paymentProviderInstance.findFirst({ where: { id, appId: app.id } });
     if (!existing) return NextResponse.json({ error: '支付实例不存在' }, { status: 404 });
 
     const pendingCount = await getPendingOrderCount(id);
@@ -186,6 +199,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await prisma.paymentProviderInstance.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to delete provider instance:', error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: '删除支付实例失败' }, { status: 500 });
   }

@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { getGroup } from '@/lib/sub2api/client';
+import { resolveAppByCode } from '@/lib/app-context';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
 
   try {
     const { id } = await params;
+    const appCode = request.nextUrl.searchParams.get('app_code');
     const body = await request.json();
 
-    const existing = await prisma.subscriptionPlan.findUnique({ where: { id } });
+    const app = await resolveAppByCode(appCode);
+    const existing = await prisma.subscriptionPlan.findFirst({ where: { id, appId: app.id } });
     if (!existing) {
       return NextResponse.json({ error: '订阅套餐不存在' }, { status: 404 });
     }
@@ -96,6 +99,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       updatedAt: plan.updatedAt,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to update subscription plan:', error);
     return NextResponse.json({ error: '更新订阅套餐失败' }, { status: 500 });
   }
@@ -106,8 +112,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   try {
     const { id } = await params;
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
 
-    const existing = await prisma.subscriptionPlan.findUnique({ where: { id } });
+    const existing = await prisma.subscriptionPlan.findFirst({ where: { id, appId: app.id } });
     if (!existing) {
       return NextResponse.json({ error: '订阅套餐不存在' }, { status: 404 });
     }
@@ -128,6 +136,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to delete subscription plan:', error);
     return NextResponse.json({ error: '删除订阅套餐失败' }, { status: 500 });
   }

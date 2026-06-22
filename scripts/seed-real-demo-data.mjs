@@ -48,6 +48,15 @@ async function upsertSystemConfig(key, value, group = 'general', label = null) {
 async function run() {
   await client.connect();
 
+  await client.query(
+    `
+      insert into apps (id, code, name, status, created_at, updated_at)
+      values ('app_default', 'default', 'Default App', 'active', now(), now())
+      on conflict (code)
+      do update set name = excluded.name, status = excluded.status, updated_at = now()
+    `,
+  );
+
   await upsertSystemConfig('SUB2API_ADMIN_API_KEY', 'mock-sub2api-admin-key', 'integration', 'Mock Sub2API API Key');
   await upsertSystemConfig('ENABLED_PAYMENT_TYPES', 'alipay,wxpay', 'payment', 'Enabled payment types');
   await upsertSystemConfig('BALANCE_PAYMENT_DISABLED', 'false', 'payment', 'Disable balance payment');
@@ -84,10 +93,11 @@ async function run() {
   for (const channel of channels) {
     await client.query(
       `
-        insert into channels (id, group_id, name, platform, rate_multiplier, description, models, features, sort_order, enabled, created_at, updated_at)
-        values (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
+        insert into channels (id, app_id, group_id, name, platform, rate_multiplier, description, models, features, sort_order, enabled, created_at, updated_at)
+        values (gen_random_uuid()::text, 'app_default', $1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
         on conflict (group_id)
         do update set
+          app_id = excluded.app_id,
           name = excluded.name,
           platform = excluded.platform,
           rate_multiplier = excluded.rate_multiplier,
@@ -181,8 +191,8 @@ async function run() {
     } else {
       await client.query(
         `
-          insert into subscription_plans (id, group_id, name, description, price, original_price, validity_days, validity_unit, features, product_name, for_sale, sort_order, created_at, updated_at)
-          values (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
+          insert into subscription_plans (id, app_id, group_id, name, description, price, original_price, validity_days, validity_unit, features, product_name, for_sale, sort_order, created_at, updated_at)
+          values (gen_random_uuid()::text, 'app_default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
         `,
         [
           plan.groupId,

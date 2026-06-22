@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { encrypt, decrypt } from '@/lib/crypto';
+import { resolveAppByCode } from '@/lib/app-context';
 
 /** Fields whose values should be masked when returning to the client */
 const SENSITIVE_PATTERNS = ['key', 'pkey', 'secret', 'private', 'password'];
@@ -35,9 +36,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const providerKey = request.nextUrl.searchParams.get('providerKey');
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
 
     const instances = await prisma.paymentProviderInstance.findMany({
-      where: providerKey ? { providerKey } : undefined,
+      where: {
+        appId: app.id,
+        ...(providerKey ? { providerKey } : {}),
+      },
       orderBy: { sortOrder: 'asc' },
     });
 
@@ -49,6 +55,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ instances: result });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to list provider instances:', error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: '获取支付实例列表失败' }, { status: 500 });
   }
@@ -60,6 +69,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const appCode = request.nextUrl.searchParams.get('app_code');
     const { providerKey, name, config, enabled, sortOrder, supportedTypes, limits, refundEnabled } = body;
 
     // Validate required fields
@@ -84,9 +94,11 @@ export async function POST(request: NextRequest) {
 
     // Encrypt config before storing
     const encryptedConfig = encrypt(JSON.stringify(config));
+    const app = await resolveAppByCode(appCode);
 
     const instance = await prisma.paymentProviderInstance.create({
       data: {
+        appId: app.id,
         providerKey,
         name: name.trim(),
         config: encryptedConfig,
@@ -106,6 +118,9 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to create provider instance:', error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: '创建支付实例失败' }, { status: 500 });
   }

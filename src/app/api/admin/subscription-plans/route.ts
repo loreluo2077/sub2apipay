@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { getGroup } from '@/lib/sub2api/client';
+import { resolveAppByCode } from '@/lib/app-context';
 
 export async function GET(request: NextRequest) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
 
   try {
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
     const plans = await prisma.subscriptionPlan.findMany({
+      where: { appId: app.id },
       orderBy: { sortOrder: 'asc' },
     });
 
@@ -69,6 +73,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ plans: results });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to list subscription plans:', error);
     return NextResponse.json({ error: '获取订阅套餐列表失败' }, { status: 500 });
   }
@@ -79,6 +86,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const appCode = request.nextUrl.searchParams.get('app_code');
     const {
       group_id,
       name,
@@ -120,8 +128,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'sort_order 必须是非负整数' }, { status: 400 });
     }
 
+    const app = await resolveAppByCode(appCode);
     const plan = await prisma.subscriptionPlan.create({
       data: {
+        appId: app.id,
         groupId: Number(group_id),
         name: name.trim(),
         description: description ?? null,
@@ -157,6 +167,9 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to create subscription plan:', error);
     return NextResponse.json({ error: '创建订阅套餐失败' }, { status: 500 });
   }

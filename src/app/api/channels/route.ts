@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUserByToken } from '@/lib/sub2api/client';
 import { getGroup } from '@/lib/sub2api/client';
+import { resolveAppByCode } from '@/lib/app-context';
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')?.trim();
+  const appCode = request.nextUrl.searchParams.get('app_code');
   if (!token) {
     return NextResponse.json({ error: '缺少 token' }, { status: 401 });
   }
@@ -16,8 +18,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const app = await resolveAppByCode(appCode);
     const channels = await prisma.channel.findMany({
-      where: { enabled: true },
+      where: { enabled: true, appId: app.id },
       orderBy: { sortOrder: 'asc' },
     });
 

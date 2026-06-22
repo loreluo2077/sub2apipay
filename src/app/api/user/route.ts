@@ -8,9 +8,12 @@ import { resolveLocale } from '@/lib/locale';
 import { getSystemConfig } from '@/lib/system-config';
 import { resolveEnabledPaymentTypes } from '@/lib/payment/resolve-enabled-types';
 import { prisma } from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
+import { resolveAppByCode } from '@/lib/app-context';
 
 export async function GET(request: NextRequest) {
   const locale = resolveLocale(request.nextUrl.searchParams.get('lang'));
+  const appCode = request.nextUrl.searchParams.get('app_code');
   const userId = Number(request.nextUrl.searchParams.get('user_id'));
   if (!userId || isNaN(userId) || userId <= 0) {
     return NextResponse.json({ error: locale === 'en' ? 'Invalid user ID' : '无效的用户 ID' }, { status: 400 });
@@ -41,6 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     const env = getEnv();
+    const app = await resolveAppByCode(appCode);
     await ensureDBProviders();
     const supportedTypes = paymentRegistry.getSupportedTypes();
 
@@ -71,7 +75,7 @@ export async function GET(request: NextRequest) {
           ] as string[];
           if (providerKeys.length > 0) {
             const activeInstances = await prisma.paymentProviderInstance.findMany({
-              where: { providerKey: { in: providerKeys }, enabled: true },
+              where: { appId: app.id, providerKey: { in: providerKeys }, enabled: true },
               select: { providerKey: true, supportedTypes: true },
             });
             enabledTypes = enabledTypes.filter((type) => {
@@ -87,7 +91,43 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        const methodLimits = await queryMethodLimits(enabledTypes);
+        const activeInstancesForApp = await prisma.paymentProviderInstance.findMany({
+          where: { appId: app.id, enabled: true },
+          select: { providerKey: true, supportedTypes: true, config: true, sortOrder: true },
+          orderBy: { sortOrder: 'asc' },
+        });
+
+        enabledTypes = enabledTypes.filter((type) => {
+          const providerKey = paymentRegistry.getProviderKey(type);
+          if (!providerKey) return false;
+          return activeInstancesForApp.some((inst) => {
+            if (inst.providerKey !== providerKey) return false;
+            if (!inst.supportedTypes) return true;
+            const types = inst.supportedTypes.split(',').map((s) => s.trim()).filter(Boolean);
+            return types.length === 0 || types.includes(type);
+          });
+        });
+
+        const methodLimits = await queryMethodLimits(enabledTypes, { appId: app.id });
+        let stripePublishableKey: string | null = null;
+        if (enabledTypes.includes('stripe')) {
+          const stripeInstance = activeInstancesForApp.find((inst) => {
+            if (inst.providerKey !== 'stripe') return false;
+            if (!inst.supportedTypes) return true;
+            const types = inst.supportedTypes.split(',').map((s) => s.trim()).filter(Boolean);
+            return types.length === 0 || types.includes('stripe');
+          });
+
+          if (stripeInstance) {
+            try {
+              const config = JSON.parse(decrypt(stripeInstance.config)) as Record<string, string>;
+              stripePublishableKey = config.publishableKey || null;
+            } catch {
+              stripePublishableKey = null;
+            }
+          }
+        }
+
         return {
           enabledTypes,
           methodLimits,
@@ -96,11 +136,21 @@ export async function GET(request: NextRequest) {
           minAmount: minAmountVal ? parseFloat(minAmountVal) || env.MIN_RECHARGE_AMOUNT : env.MIN_RECHARGE_AMOUNT,
           maxAmount: maxAmountVal ? parseFloat(maxAmountVal) || env.MAX_RECHARGE_AMOUNT : env.MAX_RECHARGE_AMOUNT,
           maxDailyAmount: dailyLimitVal ? parseFloat(dailyLimitVal) : env.MAX_DAILY_RECHARGE_AMOUNT,
+          stripePublishableKey,
         };
       },
     );
 
-    const { enabledTypes, methodLimits, balanceDisabled, maxPendingOrders, minAmount, maxAmount, maxDailyAmount } =
+    const {
+      enabledTypes,
+      methodLimits,
+      balanceDisabled,
+      maxPendingOrders,
+      minAmount,
+      maxAmount,
+      maxDailyAmount,
+      stripePublishableKey,
+    } =
       await configPromise;
 
     // 收集 sublabel 覆盖
@@ -143,16 +193,7 @@ export async function GET(request: NextRequest) {
         methodLimits,
         helpImageUrl: env.PAY_HELP_IMAGE_URL ?? null,
         helpText: env.PAY_HELP_TEXT ?? null,
-        stripePublishableKey: (() => {
-          if (!enabledTypes.includes('stripe')) return null;
-          // 优先从注册的 StripeProvider 实例读取
-          try {
-            const sp = paymentRegistry.getProvider('stripe' as import('@/lib/payment').PaymentType);
-            const pk = 'getPublishableKey' in sp ? (sp as { getPublishableKey(): string | undefined }).getPublishableKey() : undefined;
-            if (pk) return pk;
-          } catch { /* not registered */ }
-          return env.STRIPE_PUBLISHABLE_KEY || null;
-        })(),
+        stripePublishableKey,
         balanceDisabled,
         maxPendingOrders,
         sublabelOverrides: Object.keys(sublabelOverrides).length > 0 ? sublabelOverrides : null,
@@ -160,6 +201,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: locale === 'en' ? 'App not found' : '业务应用不存在' }, { status: 404 });
+    }
     if (message === 'USER_NOT_FOUND') {
       return NextResponse.json({ error: locale === 'en' ? 'User not found' : '用户不存在' }, { status: 404 });
     }

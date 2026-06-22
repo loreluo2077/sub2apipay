@@ -27,6 +27,7 @@ vi.mock('@/lib/time/biz-day', () => ({
 function makeInstance(id: string, sortOrder: number, supportedTypes: string | null = null) {
   return {
     id,
+    appId: 'app_default',
     providerKey: 'easypay',
     name: `Instance ${id}`,
     config: `enc:${JSON.stringify({ pid: id, pkey: `key-${id}` })}`,
@@ -48,7 +49,7 @@ describe('load-balancer', () => {
       const { selectInstance } = await import('@/lib/payment/load-balancer');
       mockFindMany.mockResolvedValue([]);
 
-      const result = await selectInstance('easypay');
+      const result = await selectInstance('app_default', 'easypay');
       expect(result).toBeNull();
     });
 
@@ -56,7 +57,7 @@ describe('load-balancer', () => {
       const { selectInstance } = await import('@/lib/payment/load-balancer');
       mockFindMany.mockResolvedValue([makeInstance('a', 0)]);
 
-      const result = await selectInstance('easypay');
+      const result = await selectInstance('app_default', 'easypay');
       expect(result).not.toBeNull();
       expect(result!.instanceId).toBe('a');
       expect(result!.config.pid).toBe('a');
@@ -67,10 +68,10 @@ describe('load-balancer', () => {
       const instances = [makeInstance('a', 0), makeInstance('b', 1), makeInstance('c', 2)];
       mockFindMany.mockResolvedValue(instances);
 
-      const r1 = await selectInstance('easypay');
-      const r2 = await selectInstance('easypay');
-      const r3 = await selectInstance('easypay');
-      const r4 = await selectInstance('easypay'); // wraps around
+      const r1 = await selectInstance('app_default', 'easypay');
+      const r2 = await selectInstance('app_default', 'easypay');
+      const r3 = await selectInstance('app_default', 'easypay');
+      const r4 = await selectInstance('app_default', 'easypay'); // wraps around
 
       expect(r1!.instanceId).toBe('a');
       expect(r2!.instanceId).toBe('b');
@@ -90,7 +91,7 @@ describe('load-balancer', () => {
         .mockResolvedValueOnce({ _sum: { payAmount: 500 } })
         .mockResolvedValueOnce({ _sum: { payAmount: 100 } });
 
-      const result = await selectInstance('easypay', 'least-amount');
+      const result = await selectInstance('app_default', 'easypay', 'least-amount');
       expect(result!.instanceId).toBe('b');
     });
 
@@ -102,7 +103,7 @@ describe('load-balancer', () => {
         .mockResolvedValueOnce({ _sum: { payAmount: 200 } })
         .mockResolvedValueOnce({ _sum: { payAmount: null } }); // no orders today
 
-      const result = await selectInstance('easypay', 'least-amount');
+      const result = await selectInstance('app_default', 'easypay', 'least-amount');
       expect(result!.instanceId).toBe('b');
     });
   });
@@ -112,7 +113,7 @@ describe('load-balancer', () => {
       const { selectInstance } = await import('@/lib/payment/load-balancer');
       mockFindMany.mockResolvedValue([makeInstance('a', 0, 'alipay,wxpay'), makeInstance('b', 1, 'stripe')]);
 
-      const result = await selectInstance('easypay', 'round-robin', 'alipay');
+      const result = await selectInstance('app_default', 'easypay', 'round-robin', 'alipay');
       expect(result!.instanceId).toBe('a');
     });
 
@@ -123,7 +124,7 @@ describe('load-balancer', () => {
         makeInstance('b', 1, null), // supports all
       ]);
 
-      const result = await selectInstance('easypay', 'round-robin', 'alipay');
+      const result = await selectInstance('app_default', 'easypay', 'round-robin', 'alipay');
       expect(result!.instanceId).toBe('b');
     });
 
@@ -131,7 +132,7 @@ describe('load-balancer', () => {
       const { selectInstance } = await import('@/lib/payment/load-balancer');
       mockFindMany.mockResolvedValue([makeInstance('a', 0, '')]);
 
-      const result = await selectInstance('easypay', 'round-robin', 'alipay');
+      const result = await selectInstance('app_default', 'easypay', 'round-robin', 'alipay');
       expect(result!.instanceId).toBe('a');
     });
 
@@ -139,7 +140,7 @@ describe('load-balancer', () => {
       const { selectInstance } = await import('@/lib/payment/load-balancer');
       mockFindMany.mockResolvedValue([makeInstance('a', 0, 'stripe'), makeInstance('b', 1, 'wxpay')]);
 
-      const result = await selectInstance('easypay', 'round-robin', 'alipay');
+      const result = await selectInstance('app_default', 'easypay', 'round-robin', 'alipay');
       expect(result).toBeNull();
     });
 
@@ -147,7 +148,7 @@ describe('load-balancer', () => {
       const { selectInstance } = await import('@/lib/payment/load-balancer');
       mockFindMany.mockResolvedValue([makeInstance('a', 0, 'stripe'), makeInstance('b', 1, 'wxpay')]);
 
-      const result = await selectInstance('easypay');
+      const result = await selectInstance('app_default', 'easypay');
       expect(result).not.toBeNull();
     });
   });

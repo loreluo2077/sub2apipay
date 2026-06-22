@@ -73,7 +73,7 @@ interface InstanceChannelLimits {
  * 聚合实例级限额：对每个支付类型，取所有实例中最宽松的单笔范围 + 检查日限额可用性。
  * 当剩余日额度 < 该实例的 singleMin 时，视为该实例不可用。
  */
-async function aggregateInstanceLimits(paymentTypes: string[]): Promise<
+async function aggregateInstanceLimits(paymentTypes: string[], appId?: string): Promise<
   Record<
     string,
     {
@@ -97,7 +97,7 @@ async function aggregateInstanceLimits(paymentTypes: string[]): Promise<
   > = {};
 
   const allInstances = await prisma.paymentProviderInstance.findMany({
-    where: { enabled: true },
+    where: { enabled: true, ...(appId ? { appId } : {}) },
     select: { id: true, limits: true, supportedTypes: true },
   });
 
@@ -213,20 +213,25 @@ async function aggregateInstanceLimits(paymentTypes: string[]): Promise<
  * 批量查询多个支付渠道的今日使用情况。
  * 聚合全局限额 + 实例级限额，一次性返回前端所需的可用性信息。
  */
-export async function queryMethodLimits(paymentTypes: string[]): Promise<Record<string, MethodLimitStatus>> {
+export async function queryMethodLimits(
+  paymentTypes: string[],
+  options?: { appId?: string },
+): Promise<Record<string, MethodLimitStatus>> {
   const todayStart = getBizDayStartUTC();
+  const appId = options?.appId;
 
   const [usageRows, instanceAgg] = await Promise.all([
     prisma.order.groupBy({
       by: ['paymentType'],
       where: {
+        ...(appId ? { appId } : {}),
         paymentType: { in: paymentTypes },
         status: { in: [ORDER_STATUS.PAID, ORDER_STATUS.RECHARGING, ORDER_STATUS.COMPLETED] },
         paidAt: { gte: todayStart },
       },
       _sum: { amount: true },
     }),
-    aggregateInstanceLimits(paymentTypes),
+    aggregateInstanceLimits(paymentTypes, appId),
   ]);
 
   const usageMap = Object.fromEntries(usageRows.map((row) => [row.paymentType, Number(row._sum.amount ?? 0)]));

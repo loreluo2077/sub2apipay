@@ -6,6 +6,8 @@ const mockGetUser = vi.fn();
 const mockGetSystemConfig = vi.fn();
 const mockQueryMethodLimits = vi.fn();
 const mockGetSupportedTypes = vi.fn();
+const mockFindMany = vi.fn();
+const mockResolveAppByCode = vi.fn();
 
 vi.mock('@/lib/sub2api/client', () => ({
   getCurrentUserByToken: (...args: unknown[]) => mockGetCurrentUserByToken(...args),
@@ -32,7 +34,17 @@ vi.mock('@/lib/payment', () => ({
   ensureDBProviders: vi.fn().mockResolvedValue(undefined),
   paymentRegistry: {
     getSupportedTypes: (...args: unknown[]) => mockGetSupportedTypes(...args),
+    getProviderKey: (type: string) => {
+      if (type === 'alipay' || type === 'alipay_direct') return 'alipay';
+      if (type === 'wxpay' || type === 'wxpay_direct') return 'wxpay';
+      if (type === 'stripe') return 'stripe';
+      return undefined;
+    },
   },
+}));
+
+vi.mock('@/lib/app-context', () => ({
+  resolveAppByCode: (...args: unknown[]) => mockResolveAppByCode(...args),
 }));
 
 vi.mock('@/lib/pay-utils', () => ({
@@ -48,6 +60,18 @@ vi.mock('@/lib/locale', () => ({
 
 vi.mock('@/lib/system-config', () => ({
   getSystemConfig: (...args: unknown[]) => mockGetSystemConfig(...args),
+}));
+
+vi.mock('@/lib/db', () => ({
+  prisma: {
+    paymentProviderInstance: {
+      findMany: (...args: unknown[]) => mockFindMany(...args),
+    },
+  },
+}));
+
+vi.mock('@/lib/crypto', () => ({
+  decrypt: (value: string) => value,
 }));
 
 vi.mock('@/lib/payment/resolve-enabled-types', () => ({
@@ -76,6 +100,12 @@ describe('GET /api/user', () => {
     mockGetCurrentUserByToken.mockResolvedValue({ id: 1, status: 'active' });
     mockGetUser.mockResolvedValue({ id: 1, status: 'active' });
     mockGetSupportedTypes.mockReturnValue(['alipay', 'wxpay', 'stripe']);
+    mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
+    mockFindMany.mockResolvedValue([
+      { providerKey: 'alipay', supportedTypes: 'alipay', config: '{}', sortOrder: 0 },
+      { providerKey: 'wxpay', supportedTypes: 'wxpay', config: '{}', sortOrder: 1 },
+      { providerKey: 'stripe', supportedTypes: 'stripe', config: '{"publishableKey":"pk_app_scope"}', sortOrder: 2 },
+    ]);
     mockQueryMethodLimits.mockResolvedValue({
       alipay: { maxDailyAmount: 1000 },
       wxpay: { maxDailyAmount: 1000 },
@@ -130,6 +160,14 @@ describe('GET /api/user', () => {
     expect(res.status).toBe(404);
   });
 
+  it('returns 404 when app does not exist', async () => {
+    mockResolveAppByCode.mockRejectedValue(new Error('APP_NOT_FOUND'));
+
+    const res = await GET(createRequest({ app_code: 'missing-app' }));
+
+    expect(res.status).toBe(404);
+  });
+
   // ── Payment type filtering tests ──
 
   it('filters enabled payment types by ENABLED_PAYMENT_TYPES config', async () => {
@@ -144,7 +182,7 @@ describe('GET /api/user', () => {
 
     expect(response.status).toBe(200);
     expect(data.config.enabledPaymentTypes).toEqual(['alipay', 'wxpay']);
-    expect(mockQueryMethodLimits).toHaveBeenCalledWith(['alipay', 'wxpay']);
+    expect(mockQueryMethodLimits).toHaveBeenCalledWith(['alipay', 'wxpay'], { appId: 'app_default' });
   });
 
   it('falls back to supported payment types when ENABLED_PAYMENT_TYPES is empty', async () => {
@@ -159,7 +197,7 @@ describe('GET /api/user', () => {
 
     expect(response.status).toBe(200);
     expect(data.config.enabledPaymentTypes).toEqual(['alipay', 'wxpay', 'stripe']);
-    expect(mockQueryMethodLimits).toHaveBeenCalledWith(['alipay', 'wxpay', 'stripe']);
+    expect(mockQueryMethodLimits).toHaveBeenCalledWith(['alipay', 'wxpay', 'stripe'], { appId: 'app_default' });
   });
 
   it('falls back to supported payment types when ENABLED_PAYMENT_TYPES is undefined', async () => {
@@ -168,7 +206,7 @@ describe('GET /api/user', () => {
 
     expect(response.status).toBe(200);
     expect(data.config.enabledPaymentTypes).toEqual(['alipay', 'wxpay', 'stripe']);
-    expect(mockQueryMethodLimits).toHaveBeenCalledWith(['alipay', 'wxpay', 'stripe']);
+    expect(mockQueryMethodLimits).toHaveBeenCalledWith(['alipay', 'wxpay', 'stripe'], { appId: 'app_default' });
   });
 
   // ── Config defaults tests ──
@@ -206,6 +244,10 @@ describe('GET /api/user', () => {
   it('generates sublabel overrides when multiple types share same label', async () => {
     // alipay and alipay_direct both have channel "alipay" in the mock
     mockGetSupportedTypes.mockReturnValue(['alipay', 'alipay_direct', 'stripe']);
+    mockFindMany.mockResolvedValue([
+      { providerKey: 'alipay', supportedTypes: 'alipay,alipay_direct', config: '{}', sortOrder: 0 },
+      { providerKey: 'stripe', supportedTypes: 'stripe', config: '{"publishableKey":"pk_app_scope"}', sortOrder: 1 },
+    ]);
     mockQueryMethodLimits.mockResolvedValue({});
 
     const response = await GET(createRequest());
@@ -241,7 +283,19 @@ describe('GET /api/user', () => {
     expect(data.config).toHaveProperty('maxAmount');
     expect(data.config).toHaveProperty('maxDailyAmount');
     expect(data.config).toHaveProperty('methodLimits');
+    expect(data.config.stripePublishableKey).toBe('pk_app_scope');
     expect(data.config).toHaveProperty('balanceDisabled');
     expect(data.config).toHaveProperty('maxPendingOrders');
+  });
+
+  it('filters out payment types without app-scoped instances', async () => {
+    mockFindMany.mockResolvedValue([{ providerKey: 'alipay', supportedTypes: 'alipay', config: '{}', sortOrder: 0 }]);
+
+    const response = await GET(createRequest());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.config.enabledPaymentTypes).toEqual(['alipay']);
+    expect(data.config.stripePublishableKey).toBeNull();
   });
 });

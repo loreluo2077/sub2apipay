@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
+import { resolveAppByCode } from '@/lib/app-context';
 
 const updateChannelSchema = z.object({
   group_id: z.number().int().positive().nullable().optional(),
@@ -26,6 +27,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params;
+    const appCode = request.nextUrl.searchParams.get('app_code');
     const rawBody = await request.json();
     const parsed = updateChannelSchema.safeParse(rawBody);
     if (!parsed.success) {
@@ -33,15 +35,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
     const body = parsed.data;
 
-    const existing = await prisma.channel.findUnique({ where: { id } });
+    const app = await resolveAppByCode(appCode);
+    const existing = await prisma.channel.findFirst({ where: { id, appId: app.id } });
     if (!existing) {
       return NextResponse.json({ error: '渠道不存在' }, { status: 404 });
     }
 
     // 如果更新了 group_id，检查唯一性
     if (body.group_id !== undefined && body.group_id !== null && Number(body.group_id) !== existing.groupId) {
-      const conflict = await prisma.channel.findUnique({
-        where: { groupId: Number(body.group_id) },
+      const conflict = await prisma.channel.findFirst({
+        where: {
+          appId: app.id,
+          groupId: Number(body.group_id),
+          id: { not: id },
+        },
       });
       if (conflict) {
         return NextResponse.json(
@@ -72,6 +79,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       rateMultiplier: Number(channel.rateMultiplier),
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to update channel:', error);
     return NextResponse.json({ error: '更新渠道失败' }, { status: 500 });
   }
@@ -82,8 +92,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   try {
     const { id } = await params;
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
 
-    const existing = await prisma.channel.findUnique({ where: { id } });
+    const existing = await prisma.channel.findFirst({ where: { id, appId: app.id } });
     if (!existing) {
       return NextResponse.json({ error: '渠道不存在' }, { status: 404 });
     }
@@ -92,6 +104,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to delete channel:', error);
     return NextResponse.json({ error: '删除渠道失败' }, { status: 500 });
   }

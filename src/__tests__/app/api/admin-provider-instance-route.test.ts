@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
 const mockVerifyAdminToken = vi.fn();
-const mockFindUnique = vi.fn();
+const mockFindFirst = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 const mockOrderCount = vi.fn();
+const mockResolveAppByCode = vi.fn();
 
 vi.mock('@/lib/admin-auth', () => ({
   verifyAdminToken: (...args: unknown[]) => mockVerifyAdminToken(...args),
@@ -15,7 +16,7 @@ vi.mock('@/lib/admin-auth', () => ({
 vi.mock('@/lib/db', () => ({
   prisma: {
     paymentProviderInstance: {
-      findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findFirst: (...args: unknown[]) => mockFindFirst(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
     },
@@ -23,6 +24,10 @@ vi.mock('@/lib/db', () => ({
       count: (...args: unknown[]) => mockOrderCount(...args),
     },
   },
+}));
+
+vi.mock('@/lib/app-context', () => ({
+  resolveAppByCode: (...args: unknown[]) => mockResolveAppByCode(...args),
 }));
 
 vi.mock('@/lib/crypto', () => ({
@@ -68,6 +73,7 @@ describe('GET /api/admin/provider-instances/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockVerifyAdminToken.mockResolvedValue(true);
+    mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -77,13 +83,13 @@ describe('GET /api/admin/provider-instances/[id]', () => {
   });
 
   it('returns 404 when instance not found', async () => {
-    mockFindUnique.mockResolvedValue(null);
+    mockFindFirst.mockResolvedValue(null);
     const res = await GET(createRequest(), { params: params() });
     expect(res.status).toBe(404);
   });
 
   it('returns instance with decrypted and masked config', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     const res = await GET(createRequest(), { params: params() });
     const data = await res.json();
 
@@ -98,7 +104,7 @@ describe('GET /api/admin/provider-instances/[id]', () => {
 
   it('does not mask empty sensitive values (falsy check skips masking)', async () => {
     const instance = createInstance({ config: `enc:${JSON.stringify({ pkey: '' })}` });
-    mockFindUnique.mockResolvedValue(instance);
+    mockFindFirst.mockResolvedValue(instance);
     const res = await GET(createRequest(), { params: params() });
     const data = await res.json();
 
@@ -108,11 +114,17 @@ describe('GET /api/admin/provider-instances/[id]', () => {
 
   it('masks short sensitive values (<=4 chars) to ****', async () => {
     const instance = createInstance({ config: `enc:${JSON.stringify({ pkey: 'ab' })}` });
-    mockFindUnique.mockResolvedValue(instance);
+    mockFindFirst.mockResolvedValue(instance);
     const res = await GET(createRequest(), { params: params() });
     const data = await res.json();
 
     expect(data.config.pkey).toBe('****');
+  });
+
+  it('returns 404 when app does not exist', async () => {
+    mockResolveAppByCode.mockRejectedValue(new Error('APP_NOT_FOUND'));
+    const res = await GET(createRequest(), { params: params() });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -121,6 +133,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
     vi.clearAllMocks();
     mockVerifyAdminToken.mockResolvedValue(true);
     mockOrderCount.mockResolvedValue(0);
+    mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -130,13 +143,13 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
   });
 
   it('returns 404 when instance not found', async () => {
-    mockFindUnique.mockResolvedValue(null);
+    mockFindFirst.mockResolvedValue(null);
     const res = await PUT(createRequest('PUT', { name: 'New Name' }), { params: params() });
     expect(res.status).toBe(404);
   });
 
   it('returns 400 for invalid providerKey', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     const res = await PUT(createRequest('PUT', { providerKey: 'invalid' }), { params: params() });
     expect(res.status).toBe(400);
     const data = await res.json();
@@ -144,7 +157,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
   });
 
   it('returns 400 for empty name', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     const res = await PUT(createRequest('PUT', { name: '  ' }), { params: params() });
     expect(res.status).toBe(400);
     const data = await res.json();
@@ -152,26 +165,26 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
   });
 
   it('returns 400 when config is not an object', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     const res = await PUT(createRequest('PUT', { config: 'string-value' }), { params: params() });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for negative sortOrder', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     const res = await PUT(createRequest('PUT', { sortOrder: -1 }), { params: params() });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for non-integer sortOrder', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     const res = await PUT(createRequest('PUT', { sortOrder: 1.5 }), { params: params() });
     expect(res.status).toBe(400);
   });
 
   it('preserves masked config values (unchanged by user)', async () => {
     const instance = createInstance();
-    mockFindUnique.mockResolvedValue(instance);
+    mockFindFirst.mockResolvedValue(instance);
     mockUpdate.mockResolvedValue(instance);
 
     await PUT(createRequest('PUT', { config: { pid: '456', pkey: '****************1234' } }), { params: params() });
@@ -186,7 +199,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
 
   it('accepts actual config value changes', async () => {
     const instance = createInstance();
-    mockFindUnique.mockResolvedValue(instance);
+    mockFindFirst.mockResolvedValue(instance);
     mockUpdate.mockResolvedValue(instance);
 
     await PUT(createRequest('PUT', { config: { pid: '456', pkey: 'brand-new-key' } }), { params: params() });
@@ -197,7 +210,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
   });
 
   it('returns 409 when changing credentials with pending orders', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     mockOrderCount.mockResolvedValue(3);
 
     const res = await PUT(createRequest('PUT', { config: { pid: '123', pkey: 'new-secret-key' } }), {
@@ -212,7 +225,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
 
   it('allows credential change when no pending orders', async () => {
     const instance = createInstance();
-    mockFindUnique.mockResolvedValue(instance);
+    mockFindFirst.mockResolvedValue(instance);
     mockUpdate.mockResolvedValue(instance);
     mockOrderCount.mockResolvedValue(0);
 
@@ -225,7 +238,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
 
   it('allows non-credential config changes even with pending orders', async () => {
     const instance = createInstance();
-    mockFindUnique.mockResolvedValue(instance);
+    mockFindFirst.mockResolvedValue(instance);
     mockUpdate.mockResolvedValue(instance);
     mockOrderCount.mockResolvedValue(5);
 
@@ -239,7 +252,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
 
   it('updates name, enabled, sortOrder, supportedTypes', async () => {
     const instance = createInstance();
-    mockFindUnique.mockResolvedValue(instance);
+    mockFindFirst.mockResolvedValue(instance);
     mockUpdate.mockResolvedValue({ ...instance, name: 'Updated', enabled: false, sortOrder: 5 });
 
     const res = await PUT(
@@ -257,7 +270,7 @@ describe('PUT /api/admin/provider-instances/[id]', () => {
 
   it('accepts valid providerKey values', async () => {
     for (const key of ['easypay', 'alipay', 'wxpay', 'stripe']) {
-      mockFindUnique.mockResolvedValue(createInstance());
+      mockFindFirst.mockResolvedValue(createInstance());
       mockUpdate.mockResolvedValue(createInstance({ providerKey: key }));
 
       const res = await PUT(createRequest('PUT', { providerKey: key }), { params: params() });
@@ -270,6 +283,7 @@ describe('DELETE /api/admin/provider-instances/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockVerifyAdminToken.mockResolvedValue(true);
+    mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -279,13 +293,13 @@ describe('DELETE /api/admin/provider-instances/[id]', () => {
   });
 
   it('returns 404 when instance not found', async () => {
-    mockFindUnique.mockResolvedValue(null);
+    mockFindFirst.mockResolvedValue(null);
     const res = await DELETE(createRequest('DELETE'), { params: params() });
     expect(res.status).toBe(404);
   });
 
   it('returns 409 when instance has pending orders', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     mockOrderCount.mockResolvedValue(2);
 
     const res = await DELETE(createRequest('DELETE'), { params: params() });
@@ -295,7 +309,7 @@ describe('DELETE /api/admin/provider-instances/[id]', () => {
   });
 
   it('deletes instance when no pending orders', async () => {
-    mockFindUnique.mockResolvedValue(createInstance());
+    mockFindFirst.mockResolvedValue(createInstance());
     mockOrderCount.mockResolvedValue(0);
     mockDelete.mockResolvedValue(undefined);
 

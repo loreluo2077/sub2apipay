@@ -52,9 +52,12 @@ export function verifyOrderStatusAccessToken(orderId: string, token: string | nu
   return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
-export function buildOrderResultUrl(appUrl: string, orderId: string, userId?: number): string {
+export function buildOrderResultUrl(appUrl: string, orderId: string, userId?: number, appCode?: string): string {
   const url = new URL('/pay/result', appUrl);
   url.searchParams.set('order_id', orderId);
   url.searchParams.set(ORDER_STATUS_ACCESS_QUERY_KEY, createOrderStatusAccessToken(orderId, userId));
+  if (appCode) {
+    url.searchParams.set('app_code', appCode);
+  }
   return url.toString();
 }

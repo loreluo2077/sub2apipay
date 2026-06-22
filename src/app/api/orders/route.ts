@@ -9,6 +9,7 @@ import { handleApiError } from '@/lib/utils/api';
 import { getSystemConfigs } from '@/lib/system-config';
 
 const createOrderSchema = z.object({
+  app_code: z.string().min(1).optional(),
   token: z.string().min(1),
   amount: z.number().positive().max(99999999.99),
   payment_type: z.string().min(1),
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '参数错误', details: parsed.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const { token, amount, payment_type, src_host, src_url, is_mobile, order_type, plan_id } = parsed.data;
+    const { app_code, token, amount, payment_type, src_host, src_url, is_mobile, order_type, plan_id } = parsed.data;
 
     // 通过 token 解析用户身份
     let userId: number;
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
       request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || '127.0.0.1';
 
     const result = await createOrder({
+      appCode: app_code,
       userId,
       amount,
       paymentType: payment_type,

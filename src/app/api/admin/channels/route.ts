@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { getGroup } from '@/lib/sub2api/client';
+import { resolveAppByCode } from '@/lib/app-context';
 
 export async function GET(request: NextRequest) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
 
   try {
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
     const channels = await prisma.channel.findMany({
+      where: { appId: app.id },
       orderBy: { sortOrder: 'asc' },
     });
 
@@ -33,6 +37,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ channels: results });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to list channels:', error);
     return NextResponse.json({ error: '获取渠道列表失败' }, { status: 500 });
   }
@@ -43,6 +50,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const appCode = request.nextUrl.searchParams.get('app_code');
     const { group_id, name, platform, rate_multiplier, description, models, features, sort_order, enabled } = body;
 
     if (!name || !platform || rate_multiplier === undefined) {
@@ -60,9 +68,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证 group_id 唯一性（仅在提供了 group_id 时）
+    const app = await resolveAppByCode(appCode);
+
     if (group_id) {
-      const existing = await prisma.channel.findUnique({
-        where: { groupId: Number(group_id) },
+      const existing = await prisma.channel.findFirst({
+        where: {
+          appId: app.id,
+          groupId: Number(group_id),
+        },
       });
 
       if (existing) {
@@ -72,6 +85,7 @@ export async function POST(request: NextRequest) {
 
     const channel = await prisma.channel.create({
       data: {
+        appId: app.id,
         groupId: group_id ? Number(group_id) : null,
         name,
         platform,
@@ -92,6 +106,9 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to create channel:', error);
     return NextResponse.json({ error: '创建渠道失败' }, { status: 500 });
   }
