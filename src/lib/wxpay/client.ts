@@ -11,6 +11,26 @@ function formatPublicKey(key: string): string {
 
 const BASE_URL = 'https://api.mch.weixin.qq.com';
 
+type WxpayConfigField =
+  | 'appId'
+  | 'mchId'
+  | 'privateKey'
+  | 'apiV3Key'
+  | 'publicKey'
+  | 'publicKeyId'
+  | 'certSerial';
+
+interface ResolvedWxpayConfig {
+  appId: string;
+  mchId: string;
+  privateKey: string;
+  apiV3Key: string;
+  publicKey?: string;
+  publicKeyId?: string;
+  certSerial?: string;
+  notifyUrl?: string;
+}
+
 function assertWxpayEnv(env: ReturnType<typeof getEnv>) {
   if (!env.WXPAY_APP_ID || !env.WXPAY_MCH_ID || !env.WXPAY_PRIVATE_KEY || !env.WXPAY_API_V3_KEY) {
     throw new Error(
@@ -28,35 +48,92 @@ function assertWxpayEnv(env: ReturnType<typeof getEnv>) {
   };
 }
 
-let payInstance: WxPay | null = null;
+function resolveWxpayConfig(
+  requiredFields: WxpayConfigField[],
+  instanceConfig?: Record<string, string>,
+): ResolvedWxpayConfig {
+  if (instanceConfig) {
+    const missingFields = requiredFields.filter((field) => !instanceConfig[field]?.trim());
+    if (missingFields.length > 0) {
+      throw new Error(`Wxpay instance config missing required fields: ${missingFields.join(', ')}`);
+    }
+    const apiV3Key = instanceConfig.apiV3Key;
+    if (apiV3Key.length !== 32) {
+      throw new Error(`Wxpay instance config apiV3Key must be exactly 32 bytes, got ${apiV3Key.length}`);
+    }
+    return {
+      appId: instanceConfig.appId,
+      mchId: instanceConfig.mchId,
+      privateKey: instanceConfig.privateKey,
+      apiV3Key,
+      publicKey: instanceConfig.publicKey,
+      publicKeyId: instanceConfig.publicKeyId,
+      certSerial: instanceConfig.certSerial,
+      notifyUrl: instanceConfig.notifyUrl,
+    };
+  }
 
-function getPayInstance(): WxPay {
-  if (payInstance) return payInstance;
   const env = assertWxpayEnv(getEnv());
+  return {
+    appId: env.WXPAY_APP_ID,
+    mchId: env.WXPAY_MCH_ID,
+    privateKey: env.WXPAY_PRIVATE_KEY,
+    apiV3Key: env.WXPAY_API_V3_KEY,
+    publicKey: env.WXPAY_PUBLIC_KEY,
+    publicKeyId: env.WXPAY_PUBLIC_KEY_ID,
+    certSerial: env.WXPAY_CERT_SERIAL,
+    notifyUrl: env.WXPAY_NOTIFY_URL,
+  };
+}
 
-  const privateKey = Buffer.from(env.WXPAY_PRIVATE_KEY);
-  if (!env.WXPAY_PUBLIC_KEY) {
+const payInstanceCache = new Map<string, WxPay>();
+
+function getWxpayCacheKey(config: ResolvedWxpayConfig): string {
+  return [
+    config.appId,
+    config.mchId,
+    config.privateKey,
+    config.apiV3Key,
+    config.publicKey || '',
+    config.certSerial || '',
+  ].join('::');
+}
+
+function getPayInstance(instanceConfig?: Record<string, string>): WxPay {
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], instanceConfig);
+  const cacheKey = getWxpayCacheKey(config);
+  const cached = payInstanceCache.get(cacheKey);
+  if (cached) return cached;
+
+  const privateKey = Buffer.from(config.privateKey);
+  if (!config.publicKey) {
     throw new Error('WXPAY_PUBLIC_KEY is required');
   }
-  const publicKey = Buffer.from(formatPublicKey(env.WXPAY_PUBLIC_KEY));
+  const publicKey = Buffer.from(formatPublicKey(config.publicKey));
 
-  payInstance = new WxPay({
-    appid: env.WXPAY_APP_ID,
-    mchid: env.WXPAY_MCH_ID,
+  const pay = new WxPay({
+    appid: config.appId,
+    mchid: config.mchId,
     publicKey,
     privateKey,
-    key: env.WXPAY_API_V3_KEY,
-    serial_no: env.WXPAY_CERT_SERIAL,
+    key: config.apiV3Key,
+    serial_no: config.certSerial,
   });
-  return payInstance;
+  payInstanceCache.set(cacheKey, pay);
+  return pay;
 }
 
 function yuanToFen(yuan: number): number {
   return Math.round(yuan * 100);
 }
 
-async function request<T>(method: string, url: string, body?: Record<string, unknown>): Promise<T> {
-  const pay = getPayInstance();
+async function request<T>(
+  method: string,
+  url: string,
+  body?: Record<string, unknown>,
+  instanceConfig?: Record<string, string>,
+): Promise<T> {
+  const pay = getPayInstance(instanceConfig);
   const nonce_str = crypto.randomBytes(16).toString('hex');
   const timestamp = Math.floor(Date.now() / 1000).toString();
 
@@ -91,23 +168,23 @@ async function request<T>(method: string, url: string, body?: Record<string, unk
 
 /** PC 扫码支付（微信官方 API: /v3/pay/transactions/native） */
 export async function createPcOrder(params: WxpayPcOrderParams): Promise<string> {
-  const env = assertWxpayEnv(getEnv());
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], params.instanceConfig);
   const result = await request<{ code_url: string }>('POST', '/v3/pay/transactions/native', {
-    appid: env.WXPAY_APP_ID,
-    mchid: env.WXPAY_MCH_ID,
+    appid: config.appId,
+    mchid: config.mchId,
     description: params.description,
     out_trade_no: params.out_trade_no,
     notify_url: params.notify_url,
     amount: { total: yuanToFen(params.amount), currency: 'CNY' },
-  });
+  }, params.instanceConfig);
   return result.code_url;
 }
 
 export async function createH5Order(params: WxpayH5OrderParams): Promise<string> {
-  const env = assertWxpayEnv(getEnv());
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], params.instanceConfig);
   const result = await request<{ h5_url: string }>('POST', '/v3/pay/transactions/h5', {
-    appid: env.WXPAY_APP_ID,
-    mchid: env.WXPAY_MCH_ID,
+    appid: config.appId,
+    mchid: config.mchId,
     description: params.description,
     out_trade_no: params.out_trade_no,
     notify_url: params.notify_url,
@@ -116,20 +193,20 @@ export async function createH5Order(params: WxpayH5OrderParams): Promise<string>
       payer_client_ip: params.payer_client_ip,
       h5_info: { type: 'Wap' },
     },
-  });
+  }, params.instanceConfig);
   return result.h5_url;
 }
 
-export async function queryOrder(outTradeNo: string): Promise<Record<string, unknown>> {
-  const env = assertWxpayEnv(getEnv());
-  const url = `/v3/pay/transactions/out-trade-no/${outTradeNo}?mchid=${env.WXPAY_MCH_ID}`;
-  return request<Record<string, unknown>>('GET', url);
+export async function queryOrder(outTradeNo: string, instanceConfig?: Record<string, string>): Promise<Record<string, unknown>> {
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], instanceConfig);
+  const url = `/v3/pay/transactions/out-trade-no/${outTradeNo}?mchid=${config.mchId}`;
+  return request<Record<string, unknown>>('GET', url, undefined, instanceConfig);
 }
 
-export async function closeOrder(outTradeNo: string): Promise<void> {
-  const env = assertWxpayEnv(getEnv());
+export async function closeOrder(outTradeNo: string, instanceConfig?: Record<string, string>): Promise<void> {
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], instanceConfig);
   const url = `/v3/pay/transactions/out-trade-no/${outTradeNo}/close`;
-  await request('POST', url, { mchid: env.WXPAY_MCH_ID });
+  await request('POST', url, { mchid: config.mchId }, instanceConfig);
 }
 
 export async function createRefund(params: WxpayRefundParams): Promise<Record<string, unknown>> {
@@ -142,12 +219,17 @@ export async function createRefund(params: WxpayRefundParams): Promise<Record<st
       total: yuanToFen(params.total),
       currency: 'CNY',
     },
-  });
+  }, params.instanceConfig);
 }
 
-export function decipherNotify<T>(ciphertext: string, associatedData: string, nonce: string): T {
-  const env = assertWxpayEnv(getEnv());
-  const key = env.WXPAY_API_V3_KEY;
+export function decipherNotify<T>(
+  ciphertext: string,
+  associatedData: string,
+  nonce: string,
+  instanceConfig?: Record<string, string>,
+): T {
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], instanceConfig);
+  const key = config.apiV3Key;
   const ciphertextBuf = Buffer.from(ciphertext, 'base64');
   // AES-GCM 最后 16 字节是 AuthTag
   const authTag = ciphertextBuf.subarray(ciphertextBuf.length - 16);
@@ -165,9 +247,9 @@ export async function verifyNotifySign(params: {
   body: string;
   serial: string;
   signature: string;
-}): Promise<boolean> {
-  const env = getEnv();
-  if (!env.WXPAY_PUBLIC_KEY) {
+}, instanceConfig?: Record<string, string>): Promise<boolean> {
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], instanceConfig);
+  if (!config.publicKey) {
     throw new Error('WXPAY_PUBLIC_KEY is required for signature verification');
   }
 
@@ -175,5 +257,5 @@ export async function verifyNotifySign(params: {
   const message = `${params.timestamp}\n${params.nonce}\n${params.body}\n`;
   const verify = crypto.createVerify('RSA-SHA256');
   verify.update(message);
-  return verify.verify(formatPublicKey(env.WXPAY_PUBLIC_KEY), params.signature, 'base64');
+  return verify.verify(formatPublicKey(config.publicKey), params.signature, 'base64');
 }

@@ -10,6 +10,7 @@ import { resolveEnabledPaymentTypes } from '@/lib/payment/resolve-enabled-types'
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { resolveAppByCode } from '@/lib/app-context';
+import { matchesSupportedType } from '@/lib/payment/provider-instance';
 
 export async function GET(request: NextRequest) {
   const locale = resolveLocale(request.nextUrl.searchParams.get('lang'));
@@ -67,30 +68,6 @@ export async function GET(request: NextRequest) {
       ]) => {
         let enabledTypes = resolveEnabledPaymentTypes(supportedTypes, configuredPaymentTypesRaw);
 
-        // 覆盖模式下，过滤掉没有活跃实例的支付类型
-        const overrideEnabled = await getSystemConfig('OVERRIDE_ENV_ENABLED');
-        if (overrideEnabled === 'true' && enabledTypes.length > 0) {
-          const providerKeys = [
-            ...new Set(enabledTypes.map((t) => paymentRegistry.getProviderKey(t)).filter(Boolean)),
-          ] as string[];
-          if (providerKeys.length > 0) {
-            const activeInstances = await prisma.paymentProviderInstance.findMany({
-              where: { appId: app.id, providerKey: { in: providerKeys }, enabled: true },
-              select: { providerKey: true, supportedTypes: true },
-            });
-            enabledTypes = enabledTypes.filter((type) => {
-              const pk = paymentRegistry.getProviderKey(type);
-              if (!pk) return false;
-              return activeInstances.some((inst) => {
-                if (inst.providerKey !== pk) return false;
-                if (!inst.supportedTypes) return true;
-                const types = inst.supportedTypes.split(',').map((s) => s.trim()).filter(Boolean);
-                return types.length === 0 || types.includes(type);
-              });
-            });
-          }
-        }
-
         const activeInstancesForApp = await prisma.paymentProviderInstance.findMany({
           where: { appId: app.id, enabled: true },
           select: { providerKey: true, supportedTypes: true, config: true, sortOrder: true },
@@ -102,9 +79,7 @@ export async function GET(request: NextRequest) {
           if (!providerKey) return false;
           return activeInstancesForApp.some((inst) => {
             if (inst.providerKey !== providerKey) return false;
-            if (!inst.supportedTypes) return true;
-            const types = inst.supportedTypes.split(',').map((s) => s.trim()).filter(Boolean);
-            return types.length === 0 || types.includes(type);
+            return matchesSupportedType(inst.supportedTypes, type);
           });
         });
 
@@ -113,9 +88,7 @@ export async function GET(request: NextRequest) {
         if (enabledTypes.includes('stripe')) {
           const stripeInstance = activeInstancesForApp.find((inst) => {
             if (inst.providerKey !== 'stripe') return false;
-            if (!inst.supportedTypes) return true;
-            const types = inst.supportedTypes.split(',').map((s) => s.trim()).filter(Boolean);
-            return types.length === 0 || types.includes('stripe');
+            return matchesSupportedType(inst.supportedTypes, 'stripe');
           });
 
           if (stripeInstance) {

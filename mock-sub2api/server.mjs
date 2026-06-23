@@ -10,6 +10,8 @@ const APP_URL = process.env.MOCK_SUB2API_APP_URL || `http://localhost:${PORT}`;
 const DATA_DIR = path.resolve(process.cwd(), 'mock-sub2api', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'db.json');
 const MAIN_APP_URL = process.env.MOCK_SUB2API_MAIN_APP_URL || 'http://localhost:3000';
+const DEFAULT_APP_CODE = 'default';
+const DEFAULT_APP_NAME = 'Default App';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -49,6 +51,57 @@ function paymentStatusLabel(status) {
   return 'pending';
 }
 
+function makeAppCode(name, fallback = 'app') {
+  const base = String(name || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 24);
+  return base || fallback;
+}
+
+function ensureAppShape(db) {
+  if (!Array.isArray(db.apps)) {
+    db.apps = [
+      {
+        code: DEFAULT_APP_CODE,
+        name: DEFAULT_APP_NAME,
+        status: 'active',
+        notes: 'Default business app',
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      },
+    ];
+  }
+
+  if (!db.apps.some((app) => app.code === DEFAULT_APP_CODE)) {
+    db.apps.unshift({
+      code: DEFAULT_APP_CODE,
+      name: DEFAULT_APP_NAME,
+      status: 'active',
+      notes: 'Default business app',
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
+  }
+
+  for (const session of db.paymentSessions || []) {
+    if (!session.app_code) {
+      const returnUrl = String(session.return_url || '');
+      try {
+        const url = new URL(returnUrl);
+        session.app_code = url.searchParams.get('app_code') || DEFAULT_APP_CODE;
+      } catch {
+        session.app_code = DEFAULT_APP_CODE;
+      }
+    }
+  }
+
+  if (!db.nextIds) db.nextIds = {};
+  if (!db.nextIds.app) db.nextIds.app = db.apps.length + 1;
+}
+
 function ensureDataFile() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DATA_FILE)) {
@@ -74,6 +127,16 @@ function ensureDataFile() {
           notes: 'Mock admin account',
           role: 'admin',
           token: 'mock-admin-token',
+        },
+      ],
+      apps: [
+        {
+          code: DEFAULT_APP_CODE,
+          name: DEFAULT_APP_NAME,
+          status: 'active',
+          notes: 'Default business app',
+          created_at: now,
+          updated_at: now,
         },
       ],
       groups: [
@@ -171,6 +234,7 @@ function ensureDataFile() {
       balanceLogs: [],
       paymentSessions: [],
       nextIds: {
+        app: 2,
         redeemCode: 1,
         subscription: 2,
         paymentSession: 1,
@@ -182,7 +246,9 @@ function ensureDataFile() {
 
 function readDb() {
   ensureDataFile();
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  const db = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  ensureAppShape(db);
+  return db;
 }
 
 function writeDb(db) {
@@ -287,7 +353,17 @@ function createPaymentSession(db, body) {
   const outTradeNo = body.out_trade_no;
   const amount = body.money;
   const type = body.type;
-    const session = {
+  let appCode = body.app_code || DEFAULT_APP_CODE;
+  const returnUrl = String(body.return_url || '');
+  if (!body.app_code && returnUrl) {
+    try {
+      const parsed = new URL(returnUrl);
+      appCode = parsed.searchParams.get('app_code') || appCode;
+    } catch {
+      /* ignore */
+    }
+  }
+  const session = {
     id,
     trade_no: tradeNo,
     out_trade_no: outTradeNo,
@@ -298,11 +374,51 @@ function createPaymentSession(db, body) {
     notify_url: body.notify_url || '',
     return_url: body.return_url || '',
     name: body.name || 'Mock Payment',
+    app_code: appCode,
     status: 0,
     created_at: nowIso(),
   };
   db.paymentSessions.push(session);
   return session;
+}
+
+function getActiveAppCode(url, db) {
+  const code = (url.searchParams.get('app_code') || '').trim();
+  if (code && db.apps.some((app) => app.code === code)) {
+    return code;
+  }
+  return DEFAULT_APP_CODE;
+}
+
+function getAppByCode(db, appCode) {
+  return db.apps.find((app) => app.code === appCode) || db.apps[0];
+}
+
+function withAppCode(pathname, appCode) {
+  const url = new URL(pathname, APP_URL);
+  if (appCode) url.searchParams.set('app_code', appCode);
+  return `${url.pathname}${url.search}`;
+}
+
+function buildMainPayUrl(token, appCode) {
+  const url = new URL('/pay', MAIN_APP_URL);
+  url.searchParams.set('token', token);
+  if (appCode) url.searchParams.set('app_code', appCode);
+  return url.toString();
+}
+
+function buildMainOrdersUrl(token, appCode) {
+  const url = new URL('/pay/orders', MAIN_APP_URL);
+  url.searchParams.set('token', token);
+  if (appCode) url.searchParams.set('app_code', appCode);
+  return url.toString();
+}
+
+function buildMainAdminUrl(appCode) {
+  const url = new URL('/admin', MAIN_APP_URL);
+  url.searchParams.set('token', 'dev-admin-token-2026');
+  if (appCode) url.searchParams.set('app_code', appCode);
+  return url.toString();
 }
 
 function generateSign(params, pkey) {
@@ -399,7 +515,8 @@ async function applyPaymentAction(db, tradeNo, action, options = {}) {
   return { ok: false, status: 400, message: `Unknown payment action: ${action}` };
 }
 
-function renderLayout(title, body) {
+function renderLayout(title, body, options = {}) {
+  const appCode = options.appCode || DEFAULT_APP_CODE;
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -407,12 +524,21 @@ function renderLayout(title, body) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
   <style>
-    :root { color-scheme: light; --bg:#f6f7f9; --panel:#ffffff; --line:#d8dde5; --text:#19202a; --muted:#687386; --brand:#155eef; --good:#138a45; --bad:#c2410c; --warn:#a16207; }
+    :root { color-scheme: light; --bg:#f4f7fb; --panel:#ffffff; --line:#d8dde5; --text:#19202a; --muted:#687386; --brand:#155eef; --good:#138a45; --bad:#c2410c; --warn:#a16207; --sidebar:#0f172a; --sidebar-text:#cbd5e1; }
     * { box-sizing: border-box; }
     body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     a { color:var(--brand); text-decoration:none; }
     a:hover { text-decoration:underline; }
-    .shell { max-width:1180px; margin:0 auto; padding:24px; }
+    .app-shell { display:grid; grid-template-columns:260px minmax(0, 1fr); min-height:100vh; }
+    .sidebar { background:var(--sidebar); color:var(--sidebar-text); padding:24px 18px; }
+    .sidebar h1 { margin:0; font-size:18px; color:#fff; }
+    .sidebar .sub { color:#94a3b8; margin-top:6px; font-size:13px; }
+    .sidebar .stack { display:grid; gap:12px; margin-top:24px; }
+    .sidebar .navlink { display:flex; align-items:center; gap:10px; border:1px solid rgba(148,163,184,.16); border-radius:10px; padding:10px 12px; color:#e2e8f0; background:rgba(148,163,184,.05); text-decoration:none; }
+    .sidebar .navlink:hover { background:rgba(148,163,184,.1); text-decoration:none; }
+    .sidebar .meta { margin-top:18px; padding:12px; border-radius:12px; background:rgba(15,23,42,.55); border:1px solid rgba(148,163,184,.14); }
+    .content { padding:24px; }
+    .shell { max-width:1280px; margin:0 auto; }
     header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; }
     h1 { margin:0; font-size:24px; letter-spacing:0; }
     h2 { margin:0 0 12px; font-size:16px; letter-spacing:0; }
@@ -420,6 +546,11 @@ function renderLayout(title, body) {
     .nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
     .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); }
+    .metrics { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); margin-bottom:16px; }
+    .metric { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; }
+    .metric .label { color:var(--muted); font-size:12px; }
+    .metric .value { margin-top:10px; font-size:28px; font-weight:700; color:#0f172a; }
+    .metric .hint { margin-top:4px; color:var(--muted); font-size:12px; }
     table { width:100%; border-collapse:collapse; }
     th, td { border-bottom:1px solid var(--line); padding:10px 8px; text-align:left; vertical-align:top; }
     th { color:var(--muted); font-weight:600; font-size:12px; }
@@ -441,33 +572,51 @@ function renderLayout(title, body) {
     .tag.warn { color:var(--warn); border-color:#ead99d; }
     .muted { color:var(--muted); }
     .row { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
-    @media (max-width:720px) { .shell { padding:14px; } header { display:block; } .nav { margin-top:12px; } .row { grid-template-columns:1fr; } table { font-size:12px; } th, td { padding:8px 6px; } }
+    .app-switch { width:100%; min-height:40px; border-radius:10px; border:1px solid rgba(148,163,184,.22); background:#0b1220; color:#fff; padding:8px 10px; }
+    @media (max-width:960px) { .app-shell { grid-template-columns:1fr; } .sidebar { padding:18px; } .content { padding:18px; } }
+    @media (max-width:720px) { .shell { padding:0; } header { display:block; } .nav { margin-top:12px; } .row { grid-template-columns:1fr; } table { font-size:12px; } th, td { padding:8px 6px; } }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <header>
-      <div>
-        <h1>${escapeHtml(title)}</h1>
-        <div class="sub">Local Sub2API and payment gateway console</div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1>Mock Dashboard</h1>
+      <div class="sub">Sub2API + payment gateway lab</div>
+      <div class="stack">
+        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console', appCode))}">控制台总览</a>
+        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console#payments', appCode))}">支付会话</a>
+        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console#users', appCode))}">用户与订阅</a>
+        <a class="navlink" href="${escapeHtml(withAppCode('/health', appCode))}" target="_blank">健康检查</a>
       </div>
-      <nav class="nav">
-        <a class="button" href="/mock-console">Console</a>
-        <a class="button" href="/health">Health</a>
-        <a class="button" href="${MAIN_APP_URL}/pay?token=mock-user-token" target="_blank">Open Pay</a>
-        <a class="button" href="${MAIN_APP_URL}/admin?token=dev-admin-token-2026" target="_blank">Open Admin</a>
-      </nav>
-    </header>
-    ${body}
+      <div class="meta">
+        <div><strong>当前 App</strong></div>
+        <div class="sub">${escapeHtml(appCode)}</div>
+      </div>
+    </aside>
+    <main class="content">
+      <div class="shell">
+        <header>
+          <div>
+            <h1>${escapeHtml(title)}</h1>
+            <div class="sub">Local Sub2API and payment gateway console</div>
+          </div>
+          <nav class="nav">
+            <a class="button" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">Open Pay</a>
+            <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">Open Admin</a>
+          </nav>
+        </header>
+        ${body}
+      </div>
+    </main>
   </div>
 </body>
 </html>`;
 }
 
-function renderUserRows(db) {
+function renderUserRows(db, appCode) {
   return db.users
     .map((user) => {
-      const payUrl = `${MAIN_APP_URL}/pay?token=${encodeURIComponent(user.token)}`;
+      const payUrl = buildMainPayUrl(user.token, appCode);
       return `<tr>
         <td><strong>${escapeHtml(user.username)}</strong><div class="muted">#${escapeHtml(user.id)} · ${escapeHtml(user.role)}</div></td>
         <td>${escapeHtml(user.email)}<div class="muted">${escapeHtml(user.notes || '')}</div></td>
@@ -475,7 +624,7 @@ function renderUserRows(db) {
         <td><code>${escapeHtml(user.token)}</code></td>
         <td class="actions">
           <a class="button" href="${payUrl}" target="_blank">Pay Page</a>
-          <a class="button" href="${MAIN_APP_URL}/pay/orders?token=${encodeURIComponent(user.token)}" target="_blank">Orders</a>
+          <a class="button" href="${escapeHtml(buildMainOrdersUrl(user.token, appCode))}" target="_blank">Orders</a>
         </td>
       </tr>`;
     })
@@ -494,7 +643,7 @@ function renderGroupRows(db) {
     .join('');
 }
 
-function renderSubscriptionRows(db) {
+function renderSubscriptionRows(db, appCode) {
   return db.subscriptions
     .map((sub) => {
       const user = db.users.find((item) => item.id === sub.user_id);
@@ -505,11 +654,11 @@ function renderSubscriptionRows(db) {
         <td><span class="tag good">${escapeHtml(sub.status)}</span></td>
         <td>${escapeHtml(sub.expires_at)}</td>
         <td class="actions">
-          <form method="post" action="/mock-console/subscriptions/${escapeHtml(sub.id)}/extend">
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/subscriptions/${escapeHtml(sub.id)}/extend`, appCode))}">
             <input type="hidden" name="days" value="30" />
             <button type="submit">+30 days</button>
           </form>
-          <form method="post" action="/mock-console/subscriptions/${escapeHtml(sub.id)}/extend">
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/subscriptions/${escapeHtml(sub.id)}/extend`, appCode))}">
             <input type="hidden" name="days" value="-30" />
             <button type="submit">-30 days</button>
           </form>
@@ -519,42 +668,74 @@ function renderSubscriptionRows(db) {
     .join('');
 }
 
-function renderPaymentRows(db) {
+function renderPaymentRows(db, appCode) {
   return db.paymentSessions
     .slice()
     .reverse()
+    .filter((session) => (session.app_code || DEFAULT_APP_CODE) === appCode)
     .map((session) => {
       const status = paymentStatusLabel(session.status);
       const statusClass = status === 'paid' ? 'good' : status === 'pending' ? 'warn' : 'bad';
       return `<tr>
         <td><strong>${escapeHtml(session.trade_no)}</strong><div class="muted">${escapeHtml(session.out_trade_no)}</div></td>
-        <td>${escapeHtml(session.provider || 'easypay')} / ${escapeHtml(session.type)}</td>
+        <td>${escapeHtml(session.provider || 'easypay')} / ${escapeHtml(session.type)}<div class="muted">${escapeHtml(session.app_code || DEFAULT_APP_CODE)}</div></td>
         <td>¥${escapeHtml(session.money)}</td>
         <td><span class="tag ${statusClass}">${escapeHtml(status)}</span></td>
         <td>${escapeHtml(session.created_at)}<div class="muted">${escapeHtml(session.updated_at || '')}</div></td>
         <td class="actions">
           <a class="button" href="/mock-pay/${encodeURIComponent(session.trade_no)}" target="_blank">Pay Page</a>
-          <form method="post" action="/mock-console/payments/${encodeURIComponent(session.trade_no)}/success"><button class="success" type="submit">Success</button></form>
-          <form method="post" action="/mock-console/payments/${encodeURIComponent(session.trade_no)}/fail"><button class="danger" type="submit">Fail</button></form>
-          <form method="post" action="/mock-console/payments/${encodeURIComponent(session.trade_no)}/cancel"><button type="submit">Cancel</button></form>
-          <form method="post" action="/mock-console/payments/${encodeURIComponent(session.trade_no)}/expire"><button type="submit">Expire</button></form>
-          <form method="post" action="/mock-console/payments/${encodeURIComponent(session.trade_no)}/refund"><button type="submit">Refund</button></form>
-          <form method="post" action="/mock-console/payments/${encodeURIComponent(session.trade_no)}/notify"><button class="warn" type="submit">Notify</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/success`, appCode))}"><button class="success" type="submit">Success</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/fail`, appCode))}"><button class="danger" type="submit">Fail</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/cancel`, appCode))}"><button type="submit">Cancel</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/expire`, appCode))}"><button type="submit">Expire</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/refund`, appCode))}"><button type="submit">Refund</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/notify`, appCode))}"><button class="warn" type="submit">Notify</button></form>
         </td>
       </tr>`;
     })
     .join('');
 }
 
-function renderConsolePage(db, notice = '') {
+function renderConsolePage(db, appCode, notice = '') {
+  const currentApp = getAppByCode(db, appCode);
   const userOptions = db.users.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.username)} (#${escapeHtml(user.id)})</option>`).join('');
   const groupOptions = db.groups.map((group) => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.name)} (#${escapeHtml(group.id)})</option>`).join('');
+  const appOptions = db.apps
+    .map((app) => `<option value="${escapeHtml(app.code)}" ${app.code === appCode ? 'selected' : ''}>${escapeHtml(app.name)} (${escapeHtml(app.code)})</option>`)
+    .join('');
+  const scopedPayments = db.paymentSessions.filter((session) => (session.app_code || DEFAULT_APP_CODE) === appCode);
+  const pendingCount = scopedPayments.filter((session) => paymentStatusLabel(session.status) === 'pending').length;
+  const paidCount = scopedPayments.filter((session) => paymentStatusLabel(session.status) === 'paid').length;
   const body = `
     ${notice ? `<div class="panel"><strong>${escapeHtml(notice)}</strong></div>` : ''}
+    <section class="panel">
+      <div class="row">
+        <label>
+          <span>Current App</span>
+          <select class="app-switch" onchange="if(this.value){ window.location.href='${escapeHtml('/mock-console?app_code=')}' + encodeURIComponent(this.value); }">
+            ${appOptions}
+          </select>
+        </label>
+        <label>
+          <span>Open Main App</span>
+          <div class="actions">
+            <a class="button primary" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">Open Pay Page</a>
+            <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">Open Admin</a>
+          </div>
+        </label>
+      </div>
+      <div class="muted">Current app: <strong>${escapeHtml(currentApp?.name || DEFAULT_APP_NAME)}</strong> · code: <code>${escapeHtml(appCode)}</code></div>
+    </section>
+    <section class="metrics">
+      <div class="metric"><div class="label">Users</div><div class="value">${db.users.length}</div><div class="hint">Shared test users</div></div>
+      <div class="metric"><div class="label">Payments (${escapeHtml(appCode)})</div><div class="value">${scopedPayments.length}</div><div class="hint">${paidCount} paid / ${pendingCount} pending</div></div>
+      <div class="metric"><div class="label">Subscriptions</div><div class="value">${db.subscriptions.length}</div><div class="hint">Cross-app mock subscriptions</div></div>
+      <div class="metric"><div class="label">Groups</div><div class="value">${db.groups.length}</div><div class="hint">Shared product groups</div></div>
+    </section>
     <div class="grid">
       <section class="panel">
         <h2>Create User</h2>
-        <form method="post" action="/mock-console/users">
+        <form method="post" action="${escapeHtml(withAppCode('/mock-console/users', appCode))}">
           <div class="row">
             <label><span>Username</span><input name="username" value="test-user" required /></label>
             <label><span>Email</span><input name="email" value="test-user@example.com" required /></label>
@@ -568,8 +749,19 @@ function renderConsolePage(db, notice = '') {
         </form>
       </section>
       <section class="panel">
+        <h2>Create App</h2>
+        <form method="post" action="/mock-console/apps">
+          <div class="row">
+            <label><span>App Name</span><input name="name" value="Demo Shop" required /></label>
+            <label><span>App Code</span><input name="code" value="${escapeHtml(makeAppCode('demo-shop'))}" /></label>
+          </div>
+          <label><span>Notes</span><input name="notes" value="Created from dashboard" /></label>
+          <button class="primary" type="submit">Create App</button>
+        </form>
+      </section>
+      <section class="panel">
         <h2>Assign Subscription</h2>
-        <form method="post" action="/mock-console/subscriptions">
+        <form method="post" action="${escapeHtml(withAppCode('/mock-console/subscriptions', appCode))}">
           <div class="row">
             <label><span>User</span><select name="user_id">${userOptions}</select></label>
             <label><span>Group</span><select name="group_id">${groupOptions}</select></label>
@@ -582,24 +774,28 @@ function renderConsolePage(db, notice = '') {
         </form>
       </section>
     </div>
-    <section class="panel">
+    <section class="panel" id="users">
       <h2>Users</h2>
-      <table><thead><tr><th>User</th><th>Email</th><th>Balance</th><th>Token</th><th>Actions</th></tr></thead><tbody>${renderUserRows(db)}</tbody></table>
+      <table><thead><tr><th>User</th><th>Email</th><th>Balance</th><th>Token</th><th>Actions</th></tr></thead><tbody>${renderUserRows(db, appCode)}</tbody></table>
+    </section>
+    <section class="panel" id="payments">
+      <h2>Payment Sessions</h2>
+      <table><thead><tr><th>Trade</th><th>Provider</th><th>Amount</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>${renderPaymentRows(db, appCode) || '<tr><td colspan="6" class="muted">No payment sessions yet for this app.</td></tr>'}</tbody></table>
     </section>
     <section class="panel">
-      <h2>Payment Sessions</h2>
-      <table><thead><tr><th>Trade</th><th>Provider</th><th>Amount</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>${renderPaymentRows(db) || '<tr><td colspan="6" class="muted">No payment sessions yet.</td></tr>'}</tbody></table>
+      <h2>Apps</h2>
+      <table><thead><tr><th>Name</th><th>Code</th><th>Status</th><th>Created</th></tr></thead><tbody>${db.apps.map((app) => `<tr><td><strong>${escapeHtml(app.name)}</strong><div class="muted">${escapeHtml(app.notes || '')}</div></td><td><code>${escapeHtml(app.code)}</code></td><td><span class="tag ${app.code === appCode ? 'good' : ''}">${escapeHtml(app.status)}</span></td><td>${escapeHtml(app.created_at || '')}</td></tr>`).join('')}</tbody></table>
     </section>
     <section class="panel">
       <h2>Subscriptions</h2>
-      <table><thead><tr><th>User</th><th>Group</th><th>Status</th><th>Expires At</th><th>Actions</th></tr></thead><tbody>${renderSubscriptionRows(db)}</tbody></table>
+      <table><thead><tr><th>User</th><th>Group</th><th>Status</th><th>Expires At</th><th>Actions</th></tr></thead><tbody>${renderSubscriptionRows(db, appCode)}</tbody></table>
     </section>
     <section class="panel">
       <h2>Groups</h2>
       <table><thead><tr><th>Group</th><th>Type</th><th>Status</th><th>Rate</th><th>Limits D/W/M</th></tr></thead><tbody>${renderGroupRows(db)}</tbody></table>
     </section>
   `;
-  return renderLayout('Mock Console', body);
+  return renderLayout('Mock Console', body, { appCode });
 }
 
 function redirect(res, location = '/mock-console') {
@@ -662,7 +858,7 @@ function renderMockPayPage(session) {
       <form method="post" action="/mock-pay/${encodeURIComponent(session.trade_no)}/expire"><button class="warn" type="submit">模拟过期</button></form>
       <form method="post" action="/mock-pay/${encodeURIComponent(session.trade_no)}/refund"><button class="secondary" type="submit">模拟退款</button></form>
       <form method="post" action="/mock-pay/${encodeURIComponent(session.trade_no)}/notify"><button class="ghost" type="submit">重发通知</button></form>
-      <a class="secondary" href="/mock-console">返回控制台</a>
+      <a class="secondary" href="${escapeHtml(withAppCode('/mock-console', session.app_code || DEFAULT_APP_CODE))}">返回控制台</a>
     </div>
   </div>
 </body>
@@ -673,18 +869,19 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', APP_URL);
   const pathname = url.pathname;
   const db = readDb();
+  const appCode = getActiveAppCode(url, db);
 
   if (req.method === 'GET' && pathname === '/') {
-    return redirect(res, '/mock-console');
+    return redirect(res, withAppCode('/mock-console', appCode));
   }
 
   if (req.method === 'GET' && pathname === '/mock-console') {
     const notice = url.searchParams.get('notice') || '';
-    return sendHtml(res, 200, renderConsolePage(db, notice));
+    return sendHtml(res, 200, renderConsolePage(db, appCode, notice));
   }
 
   if (req.method === 'GET' && pathname === '/mock-console/api/state') {
-    return sendJson(res, 200, { code: 0, data: db });
+    return sendJson(res, 200, { code: 0, app_code: appCode, data: db });
   }
 
   if (req.method === 'POST' && pathname === '/mock-console/users') {
@@ -704,7 +901,29 @@ const server = http.createServer(async (req, res) => {
     };
     db.users.push(user);
     writeDb(db);
-    return redirect(res, `/mock-console?notice=${encodeURIComponent(`Created user ${user.username}`)}`);
+    return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`Created user ${user.username}`)}`, appCode));
+  }
+
+  if (req.method === 'POST' && pathname === '/mock-console/apps') {
+    const body = await parseBody(req);
+    const name = formValue(body, 'name', `App ${db.nextIds.app}`);
+    const inputCode = formValue(body, 'code', '');
+    const code = inputCode ? makeAppCode(inputCode, `app-${db.nextIds.app}`) : makeAppCode(name, `app-${db.nextIds.app}`);
+    if (db.apps.some((app) => app.code === code)) {
+      return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`App code already exists: ${code}`)}`, appCode));
+    }
+    const now = nowIso();
+    db.apps.push({
+      code,
+      name,
+      status: 'active',
+      notes: formValue(body, 'notes', 'Created from dashboard'),
+      created_at: now,
+      updated_at: now,
+    });
+    db.nextIds.app += 1;
+    writeDb(db);
+    return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`Created app ${name}`)}`, code));
   }
 
   if (req.method === 'POST' && pathname === '/mock-console/subscriptions') {
@@ -738,7 +957,7 @@ const server = http.createServer(async (req, res) => {
     };
     db.subscriptions.push(subscription);
     writeDb(db);
-    return redirect(res, `/mock-console?notice=${encodeURIComponent(`Assigned ${group.name} to ${user.username}`)}`);
+    return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`Assigned ${group.name} to ${user.username}`)}`, appCode));
   }
 
   if (req.method === 'POST' && pathname.match(/^\/mock-console\/subscriptions\/\d+\/extend$/)) {
@@ -751,14 +970,14 @@ const server = http.createServer(async (req, res) => {
     subscription.expires_at = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
     subscription.updated_at = nowIso();
     writeDb(db);
-    return redirect(res, `/mock-console?notice=${encodeURIComponent(`Subscription ${subscription.id} changed by ${days} days`)}`);
+    return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`Subscription ${subscription.id} changed by ${days} days`)}`, appCode));
   }
 
   if (req.method === 'POST' && pathname.match(/^\/mock-console\/payments\/[^/]+\/[^/]+$/)) {
     const [, , , tradeNo, action] = pathname.split('/');
     const result = await applyPaymentAction(db, decodeURIComponent(tradeNo), decodeURIComponent(action));
     if (!result.ok) return sendJson(res, result.status || 400, { code: result.status || 400, message: result.message });
-    return redirect(res, `/mock-console?notice=${encodeURIComponent(result.message)}`);
+    return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(result.message)}`, appCode));
   }
 
   if (req.method === 'POST' && pathname.match(/^\/mock-pay\/[^/]+\/[^/]+$/)) {

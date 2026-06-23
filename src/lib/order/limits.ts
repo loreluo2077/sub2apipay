@@ -4,11 +4,11 @@ import { ensureDBProviders, paymentRegistry } from '@/lib/payment';
 import { getMethodFeeRate } from './fee';
 import { getBizDayStartUTC } from '@/lib/time/biz-day';
 import { getSystemConfig } from '@/lib/system-config';
+import { matchesSupportedType } from '@/lib/payment/provider-instance';
 
 /**
  * 获取指定支付渠道的每日全平台限额（0 = 不限制）。
- * 覆盖模式同 /api/user：getSystemConfig（DB → process.env） → provider 默认值。
- * 当 OVERRIDE_ENV_ENABLED=true 且无显式渠道配置时，跳过 provider 默认值。
+ * 读取顺序：getSystemConfig（DB → process.env） → provider 默认值。
  */
 export async function getMethodDailyLimit(paymentType: string): Promise<number> {
   const configVal = await getSystemConfig(`MAX_DAILY_AMOUNT_${paymentType.toUpperCase()}`);
@@ -17,11 +17,7 @@ export async function getMethodDailyLimit(paymentType: string): Promise<number> 
     if (Number.isFinite(num) && num >= 0) return num;
   }
 
-  // 开启了在线配置覆盖 → 跳过 provider 硬编码默认值，使用全局限额
-  const overrideEnabled = await getSystemConfig('OVERRIDE_ENV_ENABLED');
-  if (overrideEnabled === 'true') return 0;
-
-  // Provider 默认值（未开启在线配置时兜底）
+  // Provider 默认值
   await ensureDBProviders();
   const providerDefault = paymentRegistry.getDefaultLimit(paymentType);
   if (providerDefault?.dailyMax !== undefined) return providerDefault.dailyMax;
@@ -31,8 +27,7 @@ export async function getMethodDailyLimit(paymentType: string): Promise<number> 
 
 /**
  * 获取指定支付渠道的单笔限额（0 = 使用全局 MAX_RECHARGE_AMOUNT）。
- * 覆盖模式同 /api/user：getSystemConfig（DB → process.env） → provider 默认值。
- * 当 OVERRIDE_ENV_ENABLED=true 且无显式渠道配置时，跳过 provider 默认值。
+ * 读取顺序：getSystemConfig（DB → process.env） → provider 默认值。
  */
 export async function getMethodSingleLimit(paymentType: string): Promise<number> {
   const configVal = await getSystemConfig(`MAX_SINGLE_AMOUNT_${paymentType.toUpperCase()}`);
@@ -41,11 +36,7 @@ export async function getMethodSingleLimit(paymentType: string): Promise<number>
     if (Number.isFinite(num) && num >= 0) return num;
   }
 
-  // 开启了在线配置覆盖 → 跳过 provider 硬编码默认值，使用全局限额
-  const overrideEnabled = await getSystemConfig('OVERRIDE_ENV_ENABLED');
-  if (overrideEnabled === 'true') return 0;
-
-  // Provider 默认值（未开启在线配置时兜底）
+  // Provider 默认值
   await ensureDBProviders();
   const providerDefault = paymentRegistry.getDefaultLimit(paymentType);
   if (providerDefault?.singleMax !== undefined) return providerDefault.singleMax;
@@ -129,12 +120,7 @@ async function aggregateInstanceLimits(paymentTypes: string[], appId?: string): 
 
   for (const type of paymentTypes) {
     const supporting = allInstances.filter((inst) => {
-      if (!inst.supportedTypes) return true;
-      const types = inst.supportedTypes
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return types.length === 0 || types.includes(type);
+      return matchesSupportedType(inst.supportedTypes, type);
     });
 
     if (supporting.length === 0) {

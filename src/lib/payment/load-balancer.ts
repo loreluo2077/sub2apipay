@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { getBizDayStartUTC } from '@/lib/time/biz-day';
+import { matchesSupportedType } from './provider-instance';
 
 // Round-robin counter (in-memory, resets on restart)
 const rrCounters = new Map<string, number>();
@@ -92,12 +93,7 @@ export async function selectInstance(
   // Filter by supportedTypes if paymentType is specified
   let instances = paymentType
     ? allInstances.filter((inst) => {
-        if (!inst.supportedTypes) return true; // empty = supports all
-        const types = inst.supportedTypes
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        return types.length === 0 || types.includes(paymentType);
+        return matchesSupportedType(inst.supportedTypes, paymentType);
       })
     : allInstances;
 

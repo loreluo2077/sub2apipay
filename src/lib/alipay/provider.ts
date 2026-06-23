@@ -36,7 +36,7 @@ function getRequiredParam(params: Record<string, string>, key: string): string {
   return value;
 }
 
-export function buildAlipayPaymentUrl(input: BuildAlipayPaymentUrlInput): string {
+export function buildAlipayPaymentUrl(input: BuildAlipayPaymentUrlInput, instanceConfig?: Record<string, string>): string {
   const method = input.isMobile ? 'alipay.trade.wap.pay' : 'alipay.trade.page.pay';
   const productCode = input.isMobile ? 'QUICK_WAP_WAY' : 'FAST_INSTANT_TRADE_PAY';
 
@@ -52,6 +52,7 @@ export function buildAlipayPaymentUrl(input: BuildAlipayPaymentUrlInput): string
       returnUrl: input.returnUrl,
       method,
     },
+    instanceConfig,
   );
 }
 
@@ -61,12 +62,20 @@ export function buildAlipayEntryUrl(orderId: string): string {
 }
 
 export class AlipayProvider implements PaymentProvider {
-  readonly name = 'alipay-direct';
+  readonly name: string;
   readonly providerKey = 'alipay';
   readonly supportedTypes: PaymentType[] = ['alipay_direct'];
   readonly defaultLimits = {
     alipay_direct: { singleMax: 1000, dailyMax: 10000 },
   };
+  readonly instanceId?: string;
+  private instanceConfig?: Record<string, string>;
+
+  constructor(instanceId?: string, instanceConfig?: Record<string, string>) {
+    this.instanceId = instanceId;
+    this.instanceConfig = instanceConfig;
+    this.name = instanceId ? `alipay:${instanceId}` : 'alipay-direct';
+  }
 
   async createPayment(request: CreatePaymentRequest): Promise<CreatePaymentResponse> {
     if (!request.isMobile) {
@@ -85,7 +94,7 @@ export class AlipayProvider implements PaymentProvider {
       notifyUrl: request.notifyUrl,
       returnUrl: request.returnUrl,
       isMobile: true,
-    });
+    }, this.instanceConfig);
 
     return { tradeNo: request.orderId, payUrl };
   }
@@ -95,7 +104,7 @@ export class AlipayProvider implements PaymentProvider {
     try {
       result = await execute<AlipayTradeQueryResponse>('alipay.trade.query', {
         out_trade_no: tradeNo,
-      });
+      }, undefined, this.instanceConfig);
     } catch (error) {
       if (isTradeNotExistError(error)) {
         return {
@@ -136,13 +145,15 @@ export class AlipayProvider implements PaymentProvider {
   async verifyNotification(rawBody: string | Buffer, headers: Record<string, string>): Promise<PaymentNotification> {
     const env = getEnv();
     const params = parseAlipayNotificationParams(rawBody, headers);
+    const appId = this.instanceConfig?.appId || env.ALIPAY_APP_ID || '';
+    const publicKey = this.instanceConfig?.publicKey || env.ALIPAY_PUBLIC_KEY || '';
 
     if (params.sign_type && params.sign_type.toUpperCase() !== 'RSA2') {
       throw new Error('Unsupported sign_type, only RSA2 is accepted');
     }
 
     const sign = getRequiredParam(params, 'sign');
-    if (!env.ALIPAY_PUBLIC_KEY || !verifySign(params, env.ALIPAY_PUBLIC_KEY, sign)) {
+    if (!publicKey || !verifySign(params, publicKey, sign)) {
       throw new Error(
         'Alipay notification signature verification failed (check ALIPAY_PUBLIC_KEY uses Alipay public key, not app public key, and rebuild/redeploy the latest image)',
       );
@@ -151,9 +162,9 @@ export class AlipayProvider implements PaymentProvider {
     const tradeNo = getRequiredParam(params, 'trade_no');
     const orderId = getRequiredParam(params, 'out_trade_no');
     const tradeStatus = getRequiredParam(params, 'trade_status');
-    const appId = getRequiredParam(params, 'app_id');
+    const notifyAppId = getRequiredParam(params, 'app_id');
 
-    if (appId !== env.ALIPAY_APP_ID) {
+    if (!appId || notifyAppId !== appId) {
       throw new Error('Alipay notification app_id mismatch');
     }
 
@@ -177,7 +188,7 @@ export class AlipayProvider implements PaymentProvider {
       refund_amount: request.amount.toFixed(2),
       refund_reason: request.reason || '',
       out_request_no: request.orderId + '-refund',
-    });
+    }, undefined, this.instanceConfig);
 
     return {
       refundId: result.trade_no || `${request.orderId}-refund`,
@@ -189,7 +200,7 @@ export class AlipayProvider implements PaymentProvider {
     try {
       await execute<AlipayTradeCloseResponse>('alipay.trade.close', {
         out_trade_no: tradeNo,
-      });
+      }, undefined, this.instanceConfig);
     } catch (error) {
       if (isTradeNotExistError(error)) {
         return;

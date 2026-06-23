@@ -15,7 +15,7 @@ function getTexts(locale: Locale) {
         title: 'Payment Config',
         subtitle: 'Configure payment providers and settings',
         basicConfig: 'Basic Settings',
-        basicConfigHint: 'Recharge, order and environment configuration',
+        basicConfigHint: 'Recharge rules, order behavior, and upstream connection settings',
         productNamePrefix: 'Product Name Prefix',
         productNameSuffix: 'Product Name Suffix',
         preview: 'Preview',
@@ -36,15 +36,20 @@ function getTexts(locale: Locale) {
         cancelRateLimitWindowModeFixed: 'Fixed',
         cancelRateLimitHint: (w: string, u: string, m: string, mode: string) =>
           `Within ${w} ${u === 'minute' ? 'min' : u === 'day' ? 'day' : 'hr'}, max ${m} cancel(s) (${mode === 'fixed' ? 'fixed' : 'rolling'})`,
-        overrideEnvConfig: 'Override Env Config',
-        overrideEnvHint: 'When enabled, database settings override environment variables',
         enabledProviders: 'Enabled Provider Types',
         minRechargeAmount: 'Min Recharge Amount',
         maxRechargeAmount: 'Max Recharge Amount',
         dailyRechargeLimit: 'Daily Limit (0=unlimited)',
         orderTimeoutMinutes: 'Order Timeout (min)',
-        loadingEnvDefaults: 'Loading defaults...',
         providerManagement: 'Provider Management',
+        providerManagementHint: 'Enable provider types first, then maintain concrete payment instances below.',
+        rechargeRules: 'Recharge & Order Rules',
+        rechargeRulesHint: 'Control amount ranges, pending orders, and upstream admin access.',
+        productDisplay: 'Product Display',
+        behaviorSettings: 'Behavior Settings',
+        behaviorSettingsHint: 'Control balance recharge, default refund behavior, and order cancel rate limits.',
+        providerTypesHint: 'Select which provider categories this app can use.',
+        instancesEmptyHint: 'No instances under this provider yet. Click Add Instance to continue.',
         addInstance: 'Add Instance',
         editInstance: 'Edit Instance',
         instanceName: 'Instance Name',
@@ -68,7 +73,7 @@ function getTexts(locale: Locale) {
         instanceDeleteFailed: 'Failed to delete instance',
         allChannels: 'All Channels',
         sub2apiAdminApiKey: 'Sub2API Admin API Key',
-        sub2apiAdminApiKeyHint: 'Leave empty to use environment variable',
+        sub2apiAdminApiKeyHint: 'Used for upstream admin API calls. Leave empty only if you intentionally want to rely on server env.',
         defaultDeductBalance: 'Default Deduct Balance',
         defaultDeductBalanceHint: 'When enabled, refund approval defaults to deducting balance/subscription',
       }
@@ -78,7 +83,7 @@ function getTexts(locale: Locale) {
         title: '支付配置',
         subtitle: '管理支付服务商与相关设置',
         basicConfig: '基础配置',
-        basicConfigHint: '充值、订单与环境变量覆盖配置',
+        basicConfigHint: '充值规则、订单行为与上游连接配置',
         productNamePrefix: '商品名前缀',
         productNameSuffix: '商品名后缀',
         preview: '预览',
@@ -99,15 +104,20 @@ function getTexts(locale: Locale) {
         cancelRateLimitWindowModeFixed: '固定',
         cancelRateLimitHint: (w: string, u: string, m: string, mode: string) =>
           `${w} ${u === 'minute' ? '分钟' : u === 'day' ? '天' : '小时'}内最多可取消 ${m} 次（${mode === 'fixed' ? '固定窗口' : '滚动窗口'}）`,
-        overrideEnvConfig: '覆盖环境变量配置',
-        overrideEnvHint: '开启后，数据库配置将覆盖环境变量',
         enabledProviders: '启用的服务商类型',
         minRechargeAmount: '最小充值金额',
         maxRechargeAmount: '最大充值金额',
         dailyRechargeLimit: '每日限额（0=不限）',
         orderTimeoutMinutes: '订单超时（分钟）',
-        loadingEnvDefaults: '加载默认值...',
         providerManagement: '服务商管理',
+        providerManagementHint: '先启用服务商类型，再在下方维护具体的支付实例。',
+        rechargeRules: '充值与订单规则',
+        rechargeRulesHint: '统一控制金额区间、支付中订单数量和上游管理密钥。',
+        productDisplay: '商品展示',
+        behaviorSettings: '行为设置',
+        behaviorSettingsHint: '控制余额充值、默认退款行为以及取消频率限制。',
+        providerTypesHint: '选择当前业务应用允许使用的支付服务商类别。',
+        instancesEmptyHint: '该服务商下还没有实例，可以点击“添加实例”继续配置。',
         addInstance: '添加实例',
         editInstance: '编辑实例',
         instanceName: '实例名称',
@@ -131,7 +141,7 @@ function getTexts(locale: Locale) {
         instanceDeleteFailed: '删除实例失败',
         allChannels: '全部渠道',
         sub2apiAdminApiKey: 'Sub2API Admin API Key',
-        sub2apiAdminApiKeyHint: '留空则使用环境变量',
+        sub2apiAdminApiKeyHint: '用于请求上游管理接口。只有明确要依赖服务端环境变量时才留空。',
         defaultDeductBalance: '默认扣除余额/订阅',
         defaultDeductBalanceHint: '开启后，退款通过时默认扣除余额/订阅；关闭时默认不扣除',
       };
@@ -143,7 +153,9 @@ const ALL_PROVIDER_KEYS = ['easypay', 'alipay', 'wxpay', 'stripe'] as const;
 
 const PAYMENT_TYPE_LABELS: Record<string, { zh: string; en: string }> = {
   alipay: { zh: '支付宝', en: 'Alipay' },
+  alipay_direct: { zh: '支付宝官方', en: 'Alipay Official' },
   wxpay: { zh: '微信支付', en: 'WeChat Pay' },
+  wxpay_direct: { zh: '微信官方', en: 'WeChat Official' },
   stripe: { zh: 'Stripe', en: 'Stripe' },
 };
 
@@ -156,8 +168,8 @@ const PROVIDER_LABELS: Record<string, { zh: string; en: string }> = {
 
 const PROVIDER_SUPPORTED_TYPES: Record<string, string[]> = {
   easypay: ['alipay', 'wxpay'],
-  alipay: ['alipay'],
-  wxpay: ['wxpay'],
+  alipay: ['alipay_direct'],
+  wxpay: ['wxpay_direct'],
   stripe: ['stripe'],
 };
 
@@ -166,37 +178,144 @@ interface ConfigFieldDef {
   label: { en: string; zh: string };
   sensitive: boolean;
   optional?: boolean;
+  multiline?: boolean;
+  placeholder?: { en: string; zh: string };
+  hint?: { en: string; zh: string };
 }
 
 const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
   easypay: [
-    { key: 'pid', label: { en: 'PID', zh: 'PID' }, sensitive: false },
-    { key: 'pkey', label: { en: 'PKey (Secret)', zh: 'PKey（密钥）' }, sensitive: true },
-    { key: 'apiBase', label: { en: 'API Base URL', zh: 'API 基础地址' }, sensitive: false, optional: true },
-    { key: 'notifyUrl', label: { en: 'Notify URL', zh: '异步通知地址' }, sensitive: false, optional: true },
-    { key: 'returnUrl', label: { en: 'Return URL', zh: '同步跳转地址' }, sensitive: false, optional: true },
+    { key: 'pid', label: { en: 'PID', zh: 'PID' }, sensitive: false, placeholder: { en: 'Your merchant PID', zh: '商户 PID' } },
+    {
+      key: 'pkey',
+      label: { en: 'PKey (Secret)', zh: 'PKey（密钥）' },
+      sensitive: true,
+      placeholder: { en: 'Merchant signing secret', zh: '商户签名密钥' },
+    },
+    {
+      key: 'apiBase',
+      label: { en: 'API Base URL', zh: 'API 基础地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://gateway.example.com', zh: 'https://gateway.example.com' },
+      hint: { en: 'Do not include /mapi.php or /api.php', zh: '不要带 /mapi.php 或 /api.php 后缀' },
+    },
+    {
+      key: 'notifyUrl',
+      label: { en: 'Notify URL', zh: '异步通知地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://pay.example.com/api/easypay/notify', zh: 'https://pay.example.com/api/easypay/notify' },
+    },
+    {
+      key: 'returnUrl',
+      label: { en: 'Return URL', zh: '同步跳转地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://pay.example.com/pay/result', zh: 'https://pay.example.com/pay/result' },
+    },
   ],
   alipay: [
-    { key: 'appId', label: { en: 'App ID', zh: 'App ID' }, sensitive: false },
-    { key: 'privateKey', label: { en: 'Private Key', zh: '私钥' }, sensitive: true },
-    { key: 'publicKey', label: { en: 'Alipay Public Key', zh: '支付宝公钥' }, sensitive: true },
-    { key: 'notifyUrl', label: { en: 'Notify URL', zh: '异步通知地址' }, sensitive: false, optional: true },
-    { key: 'returnUrl', label: { en: 'Return URL', zh: '同步跳转地址' }, sensitive: false, optional: true },
+    { key: 'appId', label: { en: 'App ID', zh: 'App ID' }, sensitive: false, placeholder: { en: '2021xxxxxxxxxxxx', zh: '2021xxxxxxxxxxxx' } },
+    {
+      key: 'privateKey',
+      label: { en: 'Private Key', zh: '应用私钥' },
+      sensitive: true,
+      multiline: true,
+      placeholder: { en: '-----BEGIN PRIVATE KEY-----', zh: '-----BEGIN PRIVATE KEY-----' },
+      hint: { en: 'Paste the application private key in PEM format', zh: '粘贴应用私钥，建议使用完整 PEM 格式' },
+    },
+    {
+      key: 'publicKey',
+      label: { en: 'Alipay Public Key', zh: '支付宝公钥' },
+      sensitive: true,
+      multiline: true,
+      placeholder: { en: '-----BEGIN PUBLIC KEY-----', zh: '-----BEGIN PUBLIC KEY-----' },
+      hint: { en: 'Use Alipay public key, not your app public key', zh: '这里必须是支付宝公钥，不是应用公钥' },
+    },
+    {
+      key: 'notifyUrl',
+      label: { en: 'Notify URL', zh: '异步通知地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://pay.example.com/api/alipay/notify', zh: 'https://pay.example.com/api/alipay/notify' },
+    },
+    {
+      key: 'returnUrl',
+      label: { en: 'Return URL', zh: '同步跳转地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://pay.example.com/pay/result', zh: 'https://pay.example.com/pay/result' },
+    },
   ],
   wxpay: [
-    { key: 'appId', label: { en: 'App ID', zh: 'App ID' }, sensitive: false },
-    { key: 'mchId', label: { en: 'Merchant ID', zh: '商户号' }, sensitive: false },
-    { key: 'privateKey', label: { en: 'Private Key', zh: '私钥' }, sensitive: true },
-    { key: 'apiV3Key', label: { en: 'API v3 Key', zh: 'API v3 密钥' }, sensitive: true },
-    { key: 'publicKey', label: { en: 'Public Key', zh: '公钥' }, sensitive: true },
-    { key: 'publicKeyId', label: { en: 'Public Key ID', zh: '公钥 ID' }, sensitive: false },
-    { key: 'certSerial', label: { en: 'Certificate Serial', zh: '证书序列号' }, sensitive: false },
-    { key: 'notifyUrl', label: { en: 'Notify URL', zh: '异步通知地址' }, sensitive: false, optional: true },
+    { key: 'appId', label: { en: 'App ID', zh: 'App ID' }, sensitive: false, placeholder: { en: 'wx1234567890abcdef', zh: 'wx1234567890abcdef' } },
+    { key: 'mchId', label: { en: 'Merchant ID', zh: '商户号' }, sensitive: false, placeholder: { en: 'Merchant ID', zh: '微信商户号' } },
+    {
+      key: 'privateKey',
+      label: { en: 'Merchant Private Key', zh: '商户私钥' },
+      sensitive: true,
+      multiline: true,
+      placeholder: { en: '-----BEGIN PRIVATE KEY-----', zh: '-----BEGIN PRIVATE KEY-----' },
+    },
+    {
+      key: 'apiV3Key',
+      label: { en: 'API v3 Key', zh: 'API v3 密钥' },
+      sensitive: true,
+      multiline: true,
+      placeholder: { en: '32-byte API v3 key', zh: '32 位 API v3 密钥' },
+      hint: { en: 'Must be exactly 32 bytes', zh: '必须是 32 位长度' },
+    },
+    {
+      key: 'publicKey',
+      label: { en: 'Platform Public Key', zh: '平台公钥' },
+      sensitive: true,
+      multiline: true,
+      placeholder: { en: '-----BEGIN PUBLIC KEY-----', zh: '-----BEGIN PUBLIC KEY-----' },
+    },
+    {
+      key: 'publicKeyId',
+      label: { en: 'Public Key ID', zh: '公钥 ID' },
+      sensitive: false,
+      placeholder: { en: 'PUB_KEY_ID_xxx', zh: '微信支付平台公钥 ID' },
+    },
+    {
+      key: 'certSerial',
+      label: { en: 'Certificate Serial', zh: '证书序列号' },
+      sensitive: false,
+      placeholder: { en: 'Certificate serial number', zh: '商户证书序列号' },
+    },
+    {
+      key: 'notifyUrl',
+      label: { en: 'Notify URL', zh: '异步通知地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://pay.example.com/api/wxpay/notify', zh: 'https://pay.example.com/api/wxpay/notify' },
+    },
   ],
   stripe: [
-    { key: 'secretKey', label: { en: 'Secret Key', zh: '密钥' }, sensitive: true },
-    { key: 'publishableKey', label: { en: 'Publishable Key', zh: '公开密钥' }, sensitive: false },
-    { key: 'webhookSecret', label: { en: 'Webhook Secret', zh: 'Webhook 密钥' }, sensitive: true },
+    {
+      key: 'secretKey',
+      label: { en: 'Secret Key', zh: '服务端密钥' },
+      sensitive: true,
+      multiline: true,
+      placeholder: { en: 'sk_live_xxx / sk_test_xxx', zh: 'sk_live_xxx / sk_test_xxx' },
+      hint: { en: 'Used for PaymentIntent create/query/refund', zh: '用于创建、查询、退款 PaymentIntent' },
+    },
+    {
+      key: 'publishableKey',
+      label: { en: 'Publishable Key', zh: '前端公开密钥' },
+      sensitive: false,
+      placeholder: { en: 'pk_live_xxx / pk_test_xxx', zh: 'pk_live_xxx / pk_test_xxx' },
+    },
+    {
+      key: 'webhookSecret',
+      label: { en: 'Webhook Secret', zh: 'Webhook 密钥' },
+      sensitive: true,
+      multiline: true,
+      placeholder: { en: 'whsec_xxx', zh: 'whsec_xxx' },
+      hint: { en: 'Used to verify Stripe webhook signatures for this instance', zh: '用于识别并校验该实例的 Stripe webhook 回调' },
+    },
   ],
 };
 
@@ -261,17 +380,12 @@ function PaymentConfigContent() {
   const [rcLoadBalanceStrategy, setRcLoadBalanceStrategy] = useState('round-robin');
   const [rcSub2apiKey, setRcSub2apiKey] = useState('');
   const [rcAutoRefundEnabled, setRcAutoRefundEnabled] = useState(true);
-
-  // Override env
-  const [rcOverrideEnv, setRcOverrideEnv] = useState(false);
-  const [rcOverrideSaved, setRcOverrideSaved] = useState(false);
   const [rcEnabledProviders, setRcEnabledProviders] = useState('');
   const [rcEnabledPaymentTypes, setRcEnabledPaymentTypes] = useState('');
   const [rcMinAmount, setRcMinAmount] = useState('');
   const [rcMaxAmount, setRcMaxAmount] = useState('');
   const [rcDailyLimit, setRcDailyLimit] = useState('');
   const [rcOrderTimeout, setRcOrderTimeout] = useState('');
-  const [loadingEnvDefaults, setLoadingEnvDefaults] = useState(false);
 
   // Instances
   const [instances, setInstances] = useState<ProviderInstanceData[]>([]);
@@ -308,9 +422,7 @@ function PaymentConfigContent() {
       if (!res.ok) return;
       const data = await res.json();
       const configs: { key: string; value: string }[] = data.configs ?? [];
-      let hasOverride = false;
       for (const c of configs) {
-        if (c.key === 'OVERRIDE_ENV_ENABLED') hasOverride = c.value === 'true';
         if (c.key === 'PRODUCT_NAME_PREFIX') setRcPrefix(c.value);
         if (c.key === 'PRODUCT_NAME_SUFFIX') setRcSuffix(c.value);
         if (c.key === 'BALANCE_PAYMENT_DISABLED') setRcBalanceEnabled(c.value !== 'true');
@@ -330,8 +442,6 @@ function PaymentConfigContent() {
         if (c.key === 'SUB2API_ADMIN_API_KEY') setRcSub2apiKey(/\*{4,}/.test(c.value) ? '' : c.value);
         if (c.key === 'DEFAULT_DEDUCT_BALANCE') setRcAutoRefundEnabled(c.value === 'true');
       }
-      setRcOverrideEnv(hasOverride);
-      setRcOverrideSaved(hasOverride);
     } catch {
       /* ignore */
     }
@@ -356,61 +466,6 @@ function PaymentConfigContent() {
     fetchConfig();
     fetchInstances();
   }, [fetchConfig, fetchInstances]);
-
-  // ── Override env toggle ──
-
-  const handleOverrideEnvToggle = async () => {
-    if (rcOverrideSaved) return;
-    setRcOverrideEnv(true);
-    setLoadingEnvDefaults(true);
-    try {
-      const res = await fetch(`/api/admin/config/env-defaults?token=${encodeURIComponent(token)}`);
-      if (res.ok) {
-        const data = await res.json();
-        const d = data.defaults;
-        const configuredProviders = (data.providers || [])
-          .filter((p: { configured: boolean }) => p.configured)
-          .map((p: { key: string }) => p.key);
-        setRcEnabledProviders(configuredProviders.join(','));
-        setRcEnabledPaymentTypes(d.ENABLED_PAYMENT_TYPES || '');
-        setRcMinAmount(d.RECHARGE_MIN_AMOUNT || '1');
-        setRcMaxAmount(d.RECHARGE_MAX_AMOUNT || '1000');
-        setRcDailyLimit(d.DAILY_RECHARGE_LIMIT || '10000');
-        setRcOrderTimeout(d.ORDER_TIMEOUT_MINUTES || '5');
-        if (d.MAX_PENDING_ORDERS) setRcMaxPendingOrders(d.MAX_PENDING_ORDERS);
-
-        // 自动创建服务商实例（仅当当前无实例时）
-        const instDefaults = data.instanceDefaults || {};
-        if (instances.length === 0) {
-          for (const [providerKey, instData] of Object.entries(instDefaults)) {
-            const { name, config, supportedTypes } = instData as {
-              name: string;
-              config: Record<string, string>;
-              supportedTypes: string;
-            };
-            try {
-              const appQuery = appCode ? `?app_code=${encodeURIComponent(appCode)}` : '';
-              const instRes = await fetch(`/api/admin/provider-instances${appQuery}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ providerKey, name, config, supportedTypes, enabled: true, sortOrder: 0 }),
-              });
-              if (!instRes.ok) {
-                console.warn(`Failed to create instance for ${providerKey}`);
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-          fetchInstances();
-        }
-      }
-    } catch {
-      /* ignore */
-    } finally {
-      setLoadingEnvDefaults(false);
-    }
-  };
 
   const toggleProvider = (key: string) => {
     const current = rcEnabledProviders
@@ -615,38 +670,28 @@ function PaymentConfigContent() {
               label: '频率限制窗口模式',
             },
             {
-              key: 'OVERRIDE_ENV_ENABLED',
-              value: rcOverrideEnv ? 'true' : 'false',
-              group: 'system',
-              label: '覆盖环境变量开关',
+              key: 'MAX_PENDING_ORDERS',
+              value: rcMaxPendingOrders,
+              group: 'payment',
+              label: '最多可存在支付中订单',
             },
-            ...(rcOverrideEnv
-              ? [
-                  {
-                    key: 'MAX_PENDING_ORDERS',
-                    value: rcMaxPendingOrders,
-                    group: 'payment',
-                    label: '最多可存在支付中订单',
-                  },
-                  {
-                    key: 'SUB2API_ADMIN_API_KEY',
-                    value: rcSub2apiKey,
-                    group: 'connection',
-                    label: 'Sub2API Admin API Key',
-                  },
-                  { key: 'RECHARGE_MIN_AMOUNT', value: rcMinAmount, group: 'payment', label: '最小充值金额' },
-                  { key: 'RECHARGE_MAX_AMOUNT', value: rcMaxAmount, group: 'payment', label: '最大充值金额' },
-                  { key: 'DAILY_RECHARGE_LIMIT', value: rcDailyLimit, group: 'payment', label: '每日充值限额' },
-                  { key: 'ORDER_TIMEOUT_MINUTES', value: rcOrderTimeout, group: 'payment', label: '订单超时时间' },
-                  { key: 'ENABLED_PROVIDERS', value: rcEnabledProviders, group: 'payment', label: '启用的服务商' },
-                  {
-                    key: 'ENABLED_PAYMENT_TYPES',
-                    value: rcEnabledPaymentTypes,
-                    group: 'payment',
-                    label: '启用的支付方式',
-                  },
-                ]
-              : []),
+            {
+              key: 'SUB2API_ADMIN_API_KEY',
+              value: rcSub2apiKey,
+              group: 'connection',
+              label: 'Sub2API Admin API Key',
+            },
+            { key: 'RECHARGE_MIN_AMOUNT', value: rcMinAmount, group: 'payment', label: '最小充值金额' },
+            { key: 'RECHARGE_MAX_AMOUNT', value: rcMaxAmount, group: 'payment', label: '最大充值金额' },
+            { key: 'DAILY_RECHARGE_LIMIT', value: rcDailyLimit, group: 'payment', label: '每日充值限额' },
+            { key: 'ORDER_TIMEOUT_MINUTES', value: rcOrderTimeout, group: 'payment', label: '订单超时时间' },
+            { key: 'ENABLED_PROVIDERS', value: rcEnabledProviders, group: 'payment', label: '启用的服务商' },
+            {
+              key: 'ENABLED_PAYMENT_TYPES',
+              value: rcEnabledPaymentTypes,
+              group: 'payment',
+              label: '启用的支付方式',
+            },
           ],
         }),
       });
@@ -686,6 +731,8 @@ function PaymentConfigContent() {
     'rounded-lg border p-4',
     isDark ? 'border-slate-600 bg-slate-700/40' : 'border-slate-200 bg-slate-50',
   ].join(' ');
+  const sectionTitleCls = `text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`;
+  const sectionHintCls = `mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`;
 
   const Toggle = ({ value, onChange, disabled }: { value: boolean; onChange: () => void; disabled?: boolean }) => (
     <button
@@ -735,381 +782,438 @@ function PaymentConfigContent() {
           {t.basicConfig}
         </h2>
         <p className={`text-xs mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.basicConfigHint}</p>
-
-        {/* Balance recharge toggle */}
-        <div className="flex items-center gap-2 mb-4">
-          <Toggle value={rcBalanceEnabled} onChange={() => setRcBalanceEnabled(!rcBalanceEnabled)} />
-          <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t.enableBalanceRecharge}</span>
-        </div>
-
-        {/* Product name */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <div>
-            <label className={labelCls}>{t.productNamePrefix}</label>
-            <input
-              type="text"
-              value={rcPrefix}
-              onChange={(e) => setRcPrefix(e.target.value)}
-              className={inputCls}
-              placeholder="Sub2API"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>{t.productNameSuffix}</label>
-            <input
-              type="text"
-              value={rcSuffix}
-              onChange={(e) => setRcSuffix(e.target.value)}
-              className={inputCls}
-              placeholder="CNY"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>{t.preview}</label>
-            <div
-              className={`rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-700 text-slate-300' : 'border-slate-300 bg-slate-50 text-slate-600'}`}
-            >
-              {`${rcPrefix.trim() || 'Sub2API'} 100 ${rcSuffix.trim() || 'CNY'}`.trim()}
+        <div className="space-y-4">
+          <div className={subCardCls}>
+            <h3 className={sectionTitleCls}>{t.productDisplay}</h3>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label className={labelCls}>{t.productNamePrefix}</label>
+                <input
+                  type="text"
+                  value={rcPrefix}
+                  onChange={(e) => setRcPrefix(e.target.value)}
+                  className={inputCls}
+                  placeholder="Sub2API"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>{t.productNameSuffix}</label>
+                <input
+                  type="text"
+                  value={rcSuffix}
+                  onChange={(e) => setRcSuffix(e.target.value)}
+                  className={inputCls}
+                  placeholder="CNY"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>{t.preview}</label>
+                <div
+                  className={`rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-700 text-slate-300' : 'border-slate-300 bg-slate-50 text-slate-600'}`}
+                >
+                  {`${rcPrefix.trim() || 'Sub2API'} 100 ${rcSuffix.trim() || 'CNY'}`.trim()}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Toggles row */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-4">
-          <div className="flex items-center gap-2">
-            <Toggle value={rcBalanceEnabled} onChange={() => setRcBalanceEnabled(!rcBalanceEnabled)} />
-            <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t.enableBalanceRecharge}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Toggle value={rcAutoRefundEnabled} onChange={() => setRcAutoRefundEnabled(!rcAutoRefundEnabled)} />
-            <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t.defaultDeductBalance}</span>
-          </div>
-          <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            {t.defaultDeductBalanceHint}
-          </span>
-        </div>
-
-        {/* Cancel rate limit */}
-        <div className="mb-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex items-center gap-2 self-center">
-              <Toggle
-                value={rcCancelRateLimitEnabled}
-                onChange={() => setRcCancelRateLimitEnabled(!rcCancelRateLimitEnabled)}
-              />
-              <span className={`text-sm whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                {t.cancelRateLimit}
-              </span>
+          <div className={subCardCls}>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className={sectionTitleCls}>{t.behaviorSettings}</h3>
+                <p className={sectionHintCls}>{t.behaviorSettingsHint}</p>
+              </div>
             </div>
-            {rcCancelRateLimitEnabled && (
-              <>
-                <div className="w-20">
-                  <label className={labelCls}>{t.cancelRateLimitWindow}</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="999"
-                    value={rcCancelRateLimitWindow}
-                    onChange={(e) => setRcCancelRateLimitWindow(e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div className="w-24">
-                  <label className={labelCls}>{t.cancelRateLimitUnit}</label>
-                  <select
-                    value={rcCancelRateLimitUnit}
-                    onChange={(e) => setRcCancelRateLimitUnit(e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="minute">{t.cancelRateLimitUnitMinute}</option>
-                    <option value="hour">{t.cancelRateLimitUnitHour}</option>
-                    <option value="day">{t.cancelRateLimitUnitDay}</option>
-                  </select>
-                </div>
-                <div className="w-20">
-                  <label className={labelCls}>{t.cancelRateLimitMax}</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="999"
-                    value={rcCancelRateLimitMax}
-                    onChange={(e) => setRcCancelRateLimitMax(e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div className="w-24">
-                  <label className={labelCls}>{t.cancelRateLimitWindowMode}</label>
-                  <select
-                    value={rcCancelRateLimitWindowMode}
-                    onChange={(e) => setRcCancelRateLimitWindowMode(e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="rolling">{t.cancelRateLimitWindowModeRolling}</option>
-                    <option value="fixed">{t.cancelRateLimitWindowModeFixed}</option>
-                  </select>
-                </div>
-              </>
-            )}
-          </div>
-          {rcCancelRateLimitEnabled && (
-            <p className={`mt-1.5 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              {t.cancelRateLimitHint(
-                rcCancelRateLimitWindow,
-                rcCancelRateLimitUnit,
-                rcCancelRateLimitMax,
-                rcCancelRateLimitWindowMode,
-              )}
-            </p>
-          )}
-        </div>
 
-        {/* ── 覆盖环境变量配置 ── */}
-        <div className={subCardCls}>
-          <div className="flex items-center gap-3 mb-2">
-            <Toggle value={rcOverrideEnv} onChange={handleOverrideEnvToggle} disabled={rcOverrideSaved} />
-            <span className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-              {t.overrideEnvConfig}
-            </span>
-          </div>
-          <p className={`text-xs mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.overrideEnvHint}</p>
-
-          {rcOverrideEnv &&
-            (loadingEnvDefaults ? (
-              <div className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.loadingEnvDefaults}</div>
-            ) : (
-              <>
-                {/* Sub2API Admin API Key + Max pending orders */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div
+                className={[
+                  'rounded-lg border p-4',
+                  isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white',
+                ].join(' ')}
+              >
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <label className={labelCls}>{t.sub2apiAdminApiKey}</label>
-                    <input
-                      type="password"
-                      value={rcSub2apiKey}
-                      onChange={(e) => setRcSub2apiKey(e.target.value)}
-                      className={inputCls}
-                      placeholder={t.sub2apiAdminApiKeyHint}
-                      autoComplete="off"
-                    />
+                    <div className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                      {t.enableBalanceRecharge}
+                    </div>
+                  </div>
+                  <Toggle value={rcBalanceEnabled} onChange={() => setRcBalanceEnabled(!rcBalanceEnabled)} />
+                </div>
+              </div>
+
+              <div
+                className={[
+                  'rounded-lg border p-4',
+                  isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white',
+                ].join(' ')}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                      {t.defaultDeductBalance}
+                    </div>
                     <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {t.sub2apiAdminApiKeyHint}
+                      {t.defaultDeductBalanceHint}
                     </p>
                   </div>
-                  <div>
-                    <label className={labelCls}>{t.maxPendingOrders}</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="99"
-                      value={rcMaxPendingOrders}
-                      onChange={(e) => setRcMaxPendingOrders(e.target.value)}
-                      className={[inputCls, '!w-20'].join(' ')}
-                    />
-                  </div>
+                  <Toggle value={rcAutoRefundEnabled} onChange={() => setRcAutoRefundEnabled(!rcAutoRefundEnabled)} />
                 </div>
+              </div>
+            </div>
 
-                {/* Provider type badges */}
-                <div className="mb-3">
-                  <label className={labelCls}>{t.enabledProviders}</label>
-                  <div className="flex flex-wrap gap-2">
-                    {ALL_PROVIDER_KEYS.map((key) => {
-                      const isActive = rcEnabledProviders
-                        .split(',')
-                        .map((s) => s.trim())
-                        .includes(key);
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => toggleProvider(key)}
-                          className={[
-                            'rounded-lg border px-4 py-2 text-sm font-medium transition-all',
-                            isActive
-                              ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                              : isDark
-                                ? 'border-slate-500 bg-slate-700 text-slate-300 hover:border-slate-400'
-                                : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50',
-                          ].join(' ')}
-                        >
-                          {PROVIDER_LABELS[key]?.[locale] || key}
-                        </button>
-                      );
-                    })}
-                  </div>
+            <div className="mt-4 rounded-lg border p-4" style={{ borderColor: isDark ? '#475569' : '#e2e8f0' }}>
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="flex items-center gap-2 pt-1">
+                  <Toggle
+                    value={rcCancelRateLimitEnabled}
+                    onChange={() => setRcCancelRateLimitEnabled(!rcCancelRateLimitEnabled)}
+                  />
+                  <span className={`text-sm whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                    {t.cancelRateLimit}
+                  </span>
                 </div>
-
-                {/* Amount / timeout fields */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  <div>
-                    <label className={labelCls}>{t.minRechargeAmount}</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={rcMinAmount}
-                      onChange={(e) => setRcMinAmount(e.target.value)}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>{t.maxRechargeAmount}</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={rcMaxAmount}
-                      onChange={(e) => setRcMaxAmount(e.target.value)}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>{t.dailyRechargeLimit}</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={rcDailyLimit}
-                      onChange={(e) => setRcDailyLimit(e.target.value)}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>{t.orderTimeoutMinutes}</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={rcOrderTimeout}
-                      onChange={(e) => setRcOrderTimeout(e.target.value)}
-                      className={inputCls}
-                    />
-                  </div>
-                </div>
-
-                {/* ── 服务商管理 ── */}
-                {enabledProviderKeys.length > 0 && (
-                  <div className="pt-4 border-t border-dashed" style={{ borderColor: isDark ? '#475569' : '#e2e8f0' }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          {t.providerManagement}
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          <label
-                            className={`text-xs whitespace-nowrap ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
-                          >
-                            {t.loadBalanceStrategy}
-                          </label>
-                          <select
-                            value={rcLoadBalanceStrategy}
-                            onChange={(e) => setRcLoadBalanceStrategy(e.target.value)}
-                            className={[inputCls, '!w-auto !py-1.5 !text-xs'].join(' ')}
-                          >
-                            <option value="round-robin">{t.strategyRoundRobin}</option>
-                            <option value="least-amount">{t.strategyLeastAmount}</option>
-                          </select>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={openCreateInstance}
-                        className="inline-flex items-center rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-600"
-                      >
-                        + {t.addInstance}
-                      </button>
+                {rcCancelRateLimitEnabled && (
+                  <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div>
+                      <label className={labelCls}>{t.cancelRateLimitWindow}</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="999"
+                        value={rcCancelRateLimitWindow}
+                        onChange={(e) => setRcCancelRateLimitWindow(e.target.value)}
+                        className={inputCls}
+                      />
                     </div>
-
-                    <div className="space-y-3">
-                      {enabledProviderKeys.map((pk) => {
-                        const providerInstances = instances.filter((i) => i.providerKey === pk);
-                        if (providerInstances.length === 0) return null;
-                        return (
-                          <div
-                            key={pk}
-                            className={[
-                              'rounded-lg border p-3',
-                              isDark ? 'border-slate-600 bg-slate-700/30' : 'border-slate-200 bg-slate-50/50',
-                            ].join(' ')}
-                          >
-                            <h4
-                              className={`text-xs font-semibold mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}
-                            >
-                              {PROVIDER_LABELS[pk]?.[locale] || pk}
-                            </h4>
-                            <div className="space-y-1.5">
-                              {providerInstances.map((inst) => {
-                                const instTypes = inst.supportedTypes
-                                  ? inst.supportedTypes.split(',').filter(Boolean)
-                                  : [];
-                                return (
-                                  <div
-                                    key={inst.id}
-                                    className={[
-                                      'flex items-center justify-between rounded-lg border px-3 py-2',
-                                      isDark ? 'border-slate-500/50 bg-slate-800/60' : 'border-slate-200 bg-white',
-                                    ].join(' ')}
-                                  >
-                                    <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-                                      <Toggle value={inst.enabled} onChange={() => toggleInstanceEnabled(inst)} />
-                                      <span
-                                        className={`text-sm font-medium ${inst.enabled ? (isDark ? 'text-slate-100' : 'text-slate-900') : isDark ? 'text-slate-500' : 'text-slate-400'}`}
-                                      >
-                                        {inst.name}
-                                      </span>
-                                      {instTypes.length > 0 ? (
-                                        instTypes.map((type) => (
-                                          <span
-                                            key={type}
-                                            className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}
-                                          >
-                                            {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
-                                          </span>
-                                        ))
-                                      ) : (
-                                        <span
-                                          className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-600 text-slate-400' : 'bg-slate-100 text-slate-500'}`}
-                                        >
-                                          {t.allChannels}
-                                        </span>
-                                      )}
-                                      {inst.todayAmount !== undefined && inst.todayAmount > 0 && (
-                                        <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                          {t.todayAmount}: ¥{inst.todayAmount}
-                                        </span>
-                                      )}
-                                      <div className="flex items-center gap-1">
-                                        <Toggle
-                                          value={inst.refundEnabled}
-                                          onChange={() => toggleInstanceRefundEnabled(inst)}
-                                        />
-                                        <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                          {t.instanceRefundEnabled}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <button
-                                        type="button"
-                                        onClick={() => openEditInstance(inst)}
-                                        className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${isDark ? 'text-indigo-400 hover:bg-indigo-500/15' : 'text-indigo-600 hover:bg-indigo-50'}`}
-                                      >
-                                        {locale === 'en' ? 'Edit' : '编辑'}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteInstance(inst.id)}
-                                        className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${isDark ? 'text-red-400 hover:bg-red-500/15' : 'text-red-600 hover:bg-red-50'}`}
-                                      >
-                                        {locale === 'en' ? 'Delete' : '删除'}
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <div>
+                      <label className={labelCls}>{t.cancelRateLimitUnit}</label>
+                      <select
+                        value={rcCancelRateLimitUnit}
+                        onChange={(e) => setRcCancelRateLimitUnit(e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="minute">{t.cancelRateLimitUnitMinute}</option>
+                        <option value="hour">{t.cancelRateLimitUnitHour}</option>
+                        <option value="day">{t.cancelRateLimitUnitDay}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t.cancelRateLimitMax}</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="999"
+                        value={rcCancelRateLimitMax}
+                        onChange={(e) => setRcCancelRateLimitMax(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t.cancelRateLimitWindowMode}</label>
+                      <select
+                        value={rcCancelRateLimitWindowMode}
+                        onChange={(e) => setRcCancelRateLimitWindowMode(e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="rolling">{t.cancelRateLimitWindowModeRolling}</option>
+                        <option value="fixed">{t.cancelRateLimitWindowModeFixed}</option>
+                      </select>
                     </div>
                   </div>
                 )}
-              </>
-            ))}
+              </div>
+              {rcCancelRateLimitEnabled && (
+                <p className={`mt-3 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {t.cancelRateLimitHint(
+                    rcCancelRateLimitWindow,
+                    rcCancelRateLimitUnit,
+                    rcCancelRateLimitMax,
+                    rcCancelRateLimitWindowMode,
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className={subCardCls}>
+            <div>
+              <h3 className={sectionTitleCls}>{t.rechargeRules}</h3>
+              <p className={sectionHintCls}>{t.rechargeRulesHint}</p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div>
+                <label className={labelCls}>{t.minRechargeAmount}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={rcMinAmount}
+                  onChange={(e) => setRcMinAmount(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>{t.maxRechargeAmount}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={rcMaxAmount}
+                  onChange={(e) => setRcMaxAmount(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>{t.dailyRechargeLimit}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={rcDailyLimit}
+                  onChange={(e) => setRcDailyLimit(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>{t.orderTimeoutMinutes}</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={rcOrderTimeout}
+                  onChange={(e) => setRcOrderTimeout(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>{t.maxPendingOrders}</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={rcMaxPendingOrders}
+                  onChange={(e) => setRcMaxPendingOrders(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 max-w-xl">
+              <label className={labelCls}>{t.sub2apiAdminApiKey}</label>
+              <input
+                type="password"
+                value={rcSub2apiKey}
+                onChange={(e) => setRcSub2apiKey(e.target.value)}
+                className={inputCls}
+                placeholder={t.sub2apiAdminApiKeyHint}
+                autoComplete="off"
+              />
+              <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                {t.sub2apiAdminApiKeyHint}
+              </p>
+            </div>
+          </div>
+
+          <div className={subCardCls}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className={sectionTitleCls}>{t.providerManagement}</h3>
+                <p className={sectionHintCls}>{t.providerManagementHint}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className={`text-xs whitespace-nowrap ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {t.loadBalanceStrategy}
+                </label>
+                <select
+                  value={rcLoadBalanceStrategy}
+                  onChange={(e) => setRcLoadBalanceStrategy(e.target.value)}
+                  className={[inputCls, 'min-w-[180px] !py-2'].join(' ')}
+                >
+                  <option value="round-robin">{t.strategyRoundRobin}</option>
+                  <option value="least-amount">{t.strategyLeastAmount}</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className={labelCls}>{t.enabledProviders}</label>
+              <p className={`mb-3 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.providerTypesHint}</p>
+              <div className="flex flex-wrap gap-2">
+                {ALL_PROVIDER_KEYS.map((key) => {
+                  const isActive = rcEnabledProviders
+                    .split(',')
+                    .map((s) => s.trim())
+                    .includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleProvider(key)}
+                      className={[
+                        'rounded-lg border px-4 py-2 text-sm font-medium transition-all',
+                        isActive
+                          ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                          : isDark
+                            ? 'border-slate-500 bg-slate-700 text-slate-300 hover:border-slate-400'
+                            : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50',
+                      ].join(' ')}
+                    >
+                      {PROVIDER_LABELS[key]?.[locale] || key}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+              <div className="mt-5 border-t border-dashed pt-5" style={{ borderColor: isDark ? '#475569' : '#e2e8f0' }}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className={sectionTitleCls}>{t.providerManagement}</div>
+                    <p className={sectionHintCls}>
+                      {locale === 'en'
+                        ? 'Each app can keep its own payment credentials and callback secrets here.'
+                        : '每个业务应用都可以在这里维护自己独立的支付凭证、回调地址和验签密钥。'}
+                    </p>
+                  </div>
+                  <button
+                  type="button"
+                  onClick={openCreateInstance}
+                  className="inline-flex items-center rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-600"
+                >
+                  + {t.addInstance}
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {enabledProviderKeys.length === 0 && (
+                  <div
+                    className={[
+                      'rounded-lg border border-dashed px-4 py-5 text-sm',
+                      isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500',
+                    ].join(' ')}
+                  >
+                    {t.providerTypesHint}
+                  </div>
+                )}
+
+                {enabledProviderKeys.map((pk) => {
+                  const providerInstances = instances.filter((i) => i.providerKey === pk);
+                  return (
+                    <div
+                      key={pk}
+                      className={[
+                        'rounded-lg border p-3',
+                        isDark ? 'border-slate-600 bg-slate-700/30' : 'border-slate-200 bg-slate-50/50',
+                      ].join(' ')}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <h4 className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                          {PROVIDER_LABELS[pk]?.[locale] || pk}
+                        </h4>
+                        <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                          {providerInstances.length} {locale === 'en' ? 'instance(s)' : '个实例'}
+                        </span>
+                      </div>
+
+                      {providerInstances.length === 0 ? (
+                        <div
+                          className={[
+                            'rounded-lg border border-dashed px-3 py-4 text-sm',
+                            isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500',
+                          ].join(' ')}
+                        >
+                          {t.instancesEmptyHint}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {providerInstances.map((inst) => {
+                            const instTypes = inst.supportedTypes ? inst.supportedTypes.split(',').filter(Boolean) : [];
+                            return (
+                              <div
+                                key={inst.id}
+                                className={[
+                                  'flex items-start justify-between rounded-lg border px-3 py-2.5',
+                                  isDark ? 'border-slate-500/50 bg-slate-800/60' : 'border-slate-200 bg-white',
+                                ].join(' ')}
+                              >
+                                <div className="min-w-0 space-y-2">
+                                  <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                                  <Toggle value={inst.enabled} onChange={() => toggleInstanceEnabled(inst)} />
+                                  <span
+                                    className={`text-sm font-medium ${inst.enabled ? (isDark ? 'text-slate-100' : 'text-slate-900') : isDark ? 'text-slate-500' : 'text-slate-400'}`}
+                                  >
+                                    {inst.name}
+                                  </span>
+                                  {instTypes.length > 0 ? (
+                                    instTypes.map((type) => (
+                                      <span
+                                        key={type}
+                                        className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}
+                                      >
+                                        {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-600 text-slate-400' : 'bg-slate-100 text-slate-500'}`}
+                                    >
+                                      {t.allChannels}
+                                    </span>
+                                  )}
+                                  {inst.todayAmount !== undefined && inst.todayAmount > 0 && (
+                                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                      {t.todayAmount}: ¥{inst.todayAmount}
+                                    </span>
+                                  )}
+                                  <div className="flex items-center gap-1">
+                                    <Toggle value={inst.refundEnabled} onChange={() => toggleInstanceRefundEnabled(inst)} />
+                                    <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                      {t.instanceRefundEnabled}
+                                    </span>
+                                  </div>
+                                </div>
+                                  <div className={`flex flex-wrap gap-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    {(PROVIDER_CONFIG_FIELDS[inst.providerKey] ?? [])
+                                      .slice(0, 3)
+                                      .map((field) => {
+                                        const value = inst.config?.[field.key];
+                                        if (!value) return null;
+                                        return (
+                                          <span
+                                            key={field.key}
+                                            className={`rounded px-2 py-1 ${isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
+                                          >
+                                            {field.label[locale]}: {value}
+                                          </span>
+                                        );
+                                      })}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditInstance(inst)}
+                                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${isDark ? 'text-indigo-400 hover:bg-indigo-500/15' : 'text-indigo-600 hover:bg-indigo-50'}`}
+                                  >
+                                    {locale === 'en' ? 'Edit' : '编辑'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteInstance(inst.id)}
+                                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${isDark ? 'text-red-400 hover:bg-red-500/15' : 'text-red-600 hover:bg-red-50'}`}
+                                  >
+                                    {locale === 'en' ? 'Delete' : '删除'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Save button */}
@@ -1310,18 +1414,40 @@ function PaymentConfigContent() {
                           <span className="text-red-500 ml-0.5">*</span>
                         )}
                       </label>
-                      <input
-                        type={field.sensitive ? 'password' : 'text'}
-                        value={instanceForm.config[field.key] ?? ''}
-                        onChange={(e) =>
-                          setInstanceForm({
-                            ...instanceForm,
-                            config: { ...instanceForm.config, [field.key]: e.target.value },
-                          })
-                        }
-                        className={inputCls}
-                        autoComplete="off"
-                      />
+                      {field.multiline ? (
+                        <textarea
+                          value={instanceForm.config[field.key] ?? ''}
+                          onChange={(e) =>
+                            setInstanceForm({
+                              ...instanceForm,
+                              config: { ...instanceForm.config, [field.key]: e.target.value },
+                            })
+                          }
+                          className={[inputCls, 'min-h-[112px] resize-y font-mono text-xs leading-5'].join(' ')}
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder={field.placeholder?.[locale]}
+                        />
+                      ) : (
+                        <input
+                          type={field.sensitive ? 'password' : 'text'}
+                          value={instanceForm.config[field.key] ?? ''}
+                          onChange={(e) =>
+                            setInstanceForm({
+                              ...instanceForm,
+                              config: { ...instanceForm.config, [field.key]: e.target.value },
+                            })
+                          }
+                          className={inputCls}
+                          autoComplete="off"
+                          placeholder={field.placeholder?.[locale]}
+                        />
+                      )}
+                      {field.hint && (
+                        <p className={`mt-1 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                          {field.hint[locale]}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

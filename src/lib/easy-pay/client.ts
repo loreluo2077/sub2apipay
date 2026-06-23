@@ -36,24 +36,76 @@ function resolveCid(paymentType: string, instanceConfig?: Record<string, string>
   return normalizeCidList(env.EASY_PAY_CID_WXPAY) || normalizeCidList(env.EASY_PAY_CID);
 }
 
-function assertEasyPayEnv(env: ReturnType<typeof getEnv>) {
-  if (
-    !env.EASY_PAY_PID ||
-    !env.EASY_PAY_PKEY ||
-    !env.EASY_PAY_API_BASE ||
-    !env.EASY_PAY_NOTIFY_URL ||
-    !env.EASY_PAY_RETURN_URL
-  ) {
-    throw new Error(
-      'EasyPay environment variables (EASY_PAY_PID, EASY_PAY_PKEY, EASY_PAY_API_BASE, EASY_PAY_NOTIFY_URL, EASY_PAY_RETURN_URL) are required',
-    );
+type EasyPayConfigField = 'pid' | 'pkey' | 'apiBase' | 'notifyUrl' | 'returnUrl';
+
+const ENV_FIELD_MAP: Record<EasyPayConfigField, keyof ReturnType<typeof getEnv>> = {
+  pid: 'EASY_PAY_PID',
+  pkey: 'EASY_PAY_PKEY',
+  apiBase: 'EASY_PAY_API_BASE',
+  notifyUrl: 'EASY_PAY_NOTIFY_URL',
+  returnUrl: 'EASY_PAY_RETURN_URL',
+};
+
+interface ResolvedEasyPayConfig {
+  pid: string;
+  pkey: string;
+  apiBase: string;
+  notifyUrl: string;
+  returnUrl: string;
+}
+
+function isMissingValue(value: string | undefined): boolean {
+  return !value || value.trim() === '';
+}
+
+function getEnvFieldValue(env: ReturnType<typeof getEnv>, field: EasyPayConfigField): string | undefined {
+  switch (field) {
+    case 'pid':
+      return env.EASY_PAY_PID;
+    case 'pkey':
+      return env.EASY_PAY_PKEY;
+    case 'apiBase':
+      return env.EASY_PAY_API_BASE;
+    case 'notifyUrl':
+      return env.EASY_PAY_NOTIFY_URL;
+    case 'returnUrl':
+      return env.EASY_PAY_RETURN_URL;
   }
-  return env as typeof env & {
-    EASY_PAY_PID: string;
-    EASY_PAY_PKEY: string;
-    EASY_PAY_API_BASE: string;
-    EASY_PAY_NOTIFY_URL: string;
-    EASY_PAY_RETURN_URL: string;
+}
+
+function resolveEasyPayConfig(
+  requiredFields: EasyPayConfigField[],
+  instanceConfig?: Record<string, string>,
+): ResolvedEasyPayConfig {
+  if (instanceConfig) {
+    const missingFields = requiredFields.filter((field) => isMissingValue(instanceConfig[field]));
+    if (missingFields.length > 0) {
+      throw new Error(`EasyPay instance config missing required fields: ${missingFields.join(', ')}`);
+    }
+
+    return {
+      pid: instanceConfig.pid!,
+      pkey: instanceConfig.pkey!,
+      apiBase: instanceConfig.apiBase!,
+      notifyUrl: instanceConfig.notifyUrl,
+      returnUrl: instanceConfig.returnUrl,
+    };
+  }
+
+  const env = getEnv();
+  const missingEnvFields = requiredFields.filter((field) => isMissingValue(getEnvFieldValue(env, field)));
+
+  if (missingEnvFields.length > 0) {
+    const envKeys = missingEnvFields.map((field) => ENV_FIELD_MAP[field]);
+    throw new Error(`EasyPay environment variables missing required fields: ${envKeys.join(', ')}`);
+  }
+
+  return {
+    pid: env.EASY_PAY_PID!,
+    pkey: env.EASY_PAY_PKEY!,
+    apiBase: env.EASY_PAY_API_BASE!,
+    notifyUrl: env.EASY_PAY_NOTIFY_URL ?? '',
+    returnUrl: env.EASY_PAY_RETURN_URL ?? '',
   };
 }
 
@@ -61,22 +113,10 @@ export async function createPayment(
   opts: CreatePaymentOptions,
   instanceConfig?: Record<string, string>,
 ): Promise<EasyPayCreateResponse> {
-  let pid: string, pkey: string, apiBase: string, notifyUrl: string, returnUrl: string;
-
-  if (instanceConfig) {
-    pid = instanceConfig.pid;
-    pkey = instanceConfig.pkey;
-    apiBase = instanceConfig.apiBase;
-    notifyUrl = instanceConfig.notifyUrl;
-    returnUrl = instanceConfig.returnUrl;
-  } else {
-    const env = assertEasyPayEnv(getEnv());
-    pid = env.EASY_PAY_PID;
-    pkey = env.EASY_PAY_PKEY;
-    apiBase = env.EASY_PAY_API_BASE;
-    notifyUrl = env.EASY_PAY_NOTIFY_URL;
-    returnUrl = env.EASY_PAY_RETURN_URL;
-  }
+  const { pid, pkey, apiBase, notifyUrl, returnUrl } = resolveEasyPayConfig(
+    ['pid', 'pkey', 'apiBase', 'notifyUrl', 'returnUrl'],
+    instanceConfig,
+  );
 
   const params: Record<string, string> = {
     pid,
@@ -121,18 +161,7 @@ export async function queryOrder(
   outTradeNo: string,
   instanceConfig?: Record<string, string>,
 ): Promise<EasyPayQueryResponse> {
-  let pid: string, pkey: string, apiBase: string;
-
-  if (instanceConfig) {
-    pid = instanceConfig.pid;
-    pkey = instanceConfig.pkey;
-    apiBase = instanceConfig.apiBase;
-  } else {
-    const env = assertEasyPayEnv(getEnv());
-    pid = env.EASY_PAY_PID;
-    pkey = env.EASY_PAY_PKEY;
-    apiBase = env.EASY_PAY_API_BASE;
-  }
+  const { pid, pkey, apiBase } = resolveEasyPayConfig(['pid', 'pkey', 'apiBase'], instanceConfig);
 
   // 使用 POST 避免密钥暴露在 URL 中（URL 会被记录到服务器/CDN 日志）
   const params = new URLSearchParams({
@@ -160,18 +189,7 @@ export async function refund(
   money: string,
   instanceConfig?: Record<string, string>,
 ): Promise<EasyPayRefundResponse> {
-  let pid: string, pkey: string, apiBase: string;
-
-  if (instanceConfig) {
-    pid = instanceConfig.pid;
-    pkey = instanceConfig.pkey;
-    apiBase = instanceConfig.apiBase;
-  } else {
-    const env = assertEasyPayEnv(getEnv());
-    pid = env.EASY_PAY_PID;
-    pkey = env.EASY_PAY_PKEY;
-    apiBase = env.EASY_PAY_API_BASE;
-  }
+  const { pid, pkey, apiBase } = resolveEasyPayConfig(['pid', 'pkey', 'apiBase'], instanceConfig);
 
   const params = new URLSearchParams({
     pid,

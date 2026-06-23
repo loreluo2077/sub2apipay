@@ -8,6 +8,7 @@ import { getEnv } from '@/lib/config';
 import { getSystemConfig } from '@/lib/system-config';
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
+import { createProviderFromInstance } from './provider-instance';
 
 export { paymentRegistry } from './registry';
 export type {
@@ -91,15 +92,12 @@ export function initPaymentProviders(): void {
 }
 
 /**
- * 异步初始化：当数据库覆盖模式开启时，根据 ENABLED_PROVIDERS 补注册 provider。
+ * 异步初始化：根据数据库中的 ENABLED_PROVIDERS 补注册 provider。
  * 对于有活跃实例且实例配置中包含密钥的 provider，即使没有环境变量也能注册。
  * 在所有使用 paymentRegistry 的异步入口调用。
  */
 export async function ensureDBProviders(): Promise<void> {
   initPaymentProviders();
-
-  const overrideEnabled = await getSystemConfig('OVERRIDE_ENV_ENABLED');
-  if (overrideEnabled !== 'true') return;
 
   const enabledProvidersRaw = await getSystemConfig('ENABLED_PROVIDERS');
   if (!enabledProvidersRaw) return;
@@ -145,6 +143,22 @@ export async function ensureDBProviders(): Promise<void> {
         if (config.pid && config.pkey) {
           paymentRegistry.register(new EasyPayProvider(instance.id, config));
           registeredKeys.add(key);
+        }
+        break;
+      case 'alipay':
+        if (config.appId && config.privateKey && config.publicKey) {
+          paymentRegistry.register(createProviderFromInstance(key, instance.id, config));
+          registeredKeys.add(key);
+        } else {
+          console.warn(`[payment] alipay instance ${instance.id} missing required config, skipping`);
+        }
+        break;
+      case 'wxpay':
+        if (config.appId && config.mchId && config.privateKey && config.apiV3Key) {
+          paymentRegistry.register(createProviderFromInstance(key, instance.id, config));
+          registeredKeys.add(key);
+        } else {
+          console.warn(`[payment] wxpay instance ${instance.id} missing required config, skipping`);
         }
         break;
     }

@@ -67,25 +67,6 @@ describe('getMethodDailyLimit', () => {
     expect(await getMethodDailyLimit('stripe')).toBe(8000);
   });
 
-  it('OVERRIDE_ENV_ENABLED=true 时跳过 provider 默认值', async () => {
-    mockGetSystemConfig.mockImplementation(async (key) => {
-      if (key === 'OVERRIDE_ENV_ENABLED') return 'true';
-      return undefined;
-    });
-    mockedGetDefaultLimit.mockReturnValue({ dailyMax: 10000 } as MethodDefaultLimits);
-    expect(await getMethodDailyLimit('alipay')).toBe(0);
-  });
-
-  it('OVERRIDE_ENV_ENABLED=true 但有显式渠道配置时使用配置值', async () => {
-    mockGetSystemConfig.mockImplementation(async (key) => {
-      if (key === 'MAX_DAILY_AMOUNT_ALIPAY') return '20000';
-      if (key === 'OVERRIDE_ENV_ENABLED') return 'true';
-      return undefined;
-    });
-    mockedGetDefaultLimit.mockReturnValue({ dailyMax: 10000 } as MethodDefaultLimits);
-    expect(await getMethodDailyLimit('alipay')).toBe(20000);
-  });
-
   it('paymentType 大小写不敏感（key 构造用 toUpperCase）', async () => {
     mockGetSystemConfig.mockImplementation(async (key) => {
       if (key === 'MAX_DAILY_AMOUNT_ALIPAY') return '2000';
@@ -141,15 +122,6 @@ describe('getMethodSingleLimit', () => {
     });
     mockedGetDefaultLimit.mockReturnValue({ singleMax: 150 } as MethodDefaultLimits);
     expect(await getMethodSingleLimit('alipay')).toBe(150);
-  });
-
-  it('OVERRIDE_ENV_ENABLED=true 时跳过 provider 默认值', async () => {
-    mockGetSystemConfig.mockImplementation(async (key) => {
-      if (key === 'OVERRIDE_ENV_ENABLED') return 'true';
-      return undefined;
-    });
-    mockedGetDefaultLimit.mockReturnValue({ singleMax: 1000 } as MethodDefaultLimits);
-    expect(await getMethodSingleLimit('alipay')).toBe(0);
   });
 
   it('未知支付类型返回 0', async () => {

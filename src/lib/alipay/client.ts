@@ -5,6 +5,16 @@ import { parseAlipayJsonResponseWithRaw } from './codec';
 
 const GATEWAY = 'https://openapi.alipay.com/gateway.do';
 
+type AlipayConfigField = 'appId' | 'privateKey' | 'publicKey';
+
+interface ResolvedAlipayConfig {
+  appId: string;
+  privateKey: string;
+  publicKey: string;
+  notifyUrl?: string;
+  returnUrl?: string;
+}
+
 function getCommonParams(appId: string): Record<string, string> {
   return {
     app_id: appId,
@@ -27,6 +37,35 @@ function assertAlipayEnv(env: ReturnType<typeof getEnv>) {
   };
 }
 
+function resolveAlipayConfig(
+  requiredFields: AlipayConfigField[],
+  instanceConfig?: Record<string, string>,
+): ResolvedAlipayConfig {
+  if (instanceConfig) {
+    const missingFields = requiredFields.filter((field) => !instanceConfig[field]?.trim());
+    if (missingFields.length > 0) {
+      throw new Error(`Alipay instance config missing required fields: ${missingFields.join(', ')}`);
+    }
+
+    return {
+      appId: instanceConfig.appId,
+      privateKey: instanceConfig.privateKey,
+      publicKey: instanceConfig.publicKey,
+      notifyUrl: instanceConfig.notifyUrl,
+      returnUrl: instanceConfig.returnUrl,
+    };
+  }
+
+  const env = assertAlipayEnv(getEnv());
+  return {
+    appId: env.ALIPAY_APP_ID,
+    privateKey: env.ALIPAY_PRIVATE_KEY,
+    publicKey: env.ALIPAY_PUBLIC_KEY,
+    notifyUrl: env.ALIPAY_NOTIFY_URL,
+    returnUrl: env.ALIPAY_RETURN_URL,
+  };
+}
+
 /**
  * 生成支付宝网站/H5支付的跳转 URL（GET 方式）
  * PC: alipay.trade.page.pay  H5: alipay.trade.wap.pay
@@ -34,23 +73,24 @@ function assertAlipayEnv(env: ReturnType<typeof getEnv>) {
 export function pageExecute(
   bizContent: Record<string, unknown>,
   options?: { notifyUrl?: string; returnUrl?: string | null; method?: string },
+  instanceConfig?: Record<string, string>,
 ): string {
-  const env = assertAlipayEnv(getEnv());
+  const config = resolveAlipayConfig(['appId', 'privateKey', 'publicKey'], instanceConfig);
 
   const params: Record<string, string> = {
-    ...getCommonParams(env.ALIPAY_APP_ID),
+    ...getCommonParams(config.appId),
     method: options?.method || 'alipay.trade.page.pay',
     biz_content: JSON.stringify(bizContent),
   };
 
-  if (options?.notifyUrl || env.ALIPAY_NOTIFY_URL) {
-    params.notify_url = (options?.notifyUrl || env.ALIPAY_NOTIFY_URL)!;
+  if (options?.notifyUrl || config.notifyUrl) {
+    params.notify_url = (options?.notifyUrl || config.notifyUrl)!;
   }
-  if (options?.returnUrl !== null && (options?.returnUrl || env.ALIPAY_RETURN_URL)) {
-    params.return_url = (options?.returnUrl || env.ALIPAY_RETURN_URL)!;
+  if (options?.returnUrl !== null && (options?.returnUrl || config.returnUrl)) {
+    params.return_url = (options?.returnUrl || config.returnUrl)!;
   }
 
-  params.sign = generateSign(params, env.ALIPAY_PRIVATE_KEY);
+  params.sign = generateSign(params, config.privateKey);
 
   const query = new URLSearchParams(params).toString();
   return `${GATEWAY}?${query}`;
@@ -64,11 +104,12 @@ export async function execute<T extends AlipayResponse>(
   method: string,
   bizContent: Record<string, unknown>,
   options?: { notifyUrl?: string; returnUrl?: string },
+  instanceConfig?: Record<string, string>,
 ): Promise<T> {
-  const env = assertAlipayEnv(getEnv());
+  const config = resolveAlipayConfig(['appId', 'privateKey', 'publicKey'], instanceConfig);
 
   const params: Record<string, string> = {
-    ...getCommonParams(env.ALIPAY_APP_ID),
+    ...getCommonParams(config.appId),
     method,
     biz_content: JSON.stringify(bizContent),
   };
@@ -80,7 +121,7 @@ export async function execute<T extends AlipayResponse>(
     params.return_url = options.returnUrl;
   }
 
-  params.sign = generateSign(params, env.ALIPAY_PRIVATE_KEY);
+  params.sign = generateSign(params, config.privateKey);
 
   const response = await fetch(GATEWAY, {
     method: 'POST',
@@ -97,7 +138,7 @@ export async function execute<T extends AlipayResponse>(
   // 响应验签：从原始文本中提取 responseKey 对应的 JSON 子串进行 RSA2 验签
   const responseSign = data.sign as string | undefined;
   if (responseSign) {
-    const valid = verifyResponseSign(rawText, responseKey, env.ALIPAY_PUBLIC_KEY, responseSign);
+    const valid = verifyResponseSign(rawText, responseKey, config.publicKey, responseSign);
     if (!valid) {
       throw new Error(`Alipay API response signature verification failed for ${method}`);
     }

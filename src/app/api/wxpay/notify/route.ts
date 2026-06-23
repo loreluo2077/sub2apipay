@@ -4,19 +4,44 @@ import { ensureDBProviders, paymentRegistry } from '@/lib/payment';
 import type { PaymentType } from '@/lib/payment';
 import { getEnv } from '@/lib/config';
 import { extractHeaders } from '@/lib/utils/api';
+import { prisma } from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
+import { createProviderFromInstance } from '@/lib/payment/provider-instance';
 
 export async function POST(request: NextRequest) {
   try {
-    // 微信支付未配置时，直接返回成功（避免旧回调重试产生错误日志）
-    const env = getEnv();
-    if (!env.WXPAY_PUBLIC_KEY || !env.WXPAY_MCH_ID) {
-      return Response.json({ code: 'SUCCESS', message: '成功' });
-    }
-
     await ensureDBProviders();
-    const provider = paymentRegistry.getProvider('wxpay_direct' as PaymentType);
     const rawBody = await request.text();
     const headers = extractHeaders(request);
+    const serial = headers['wechatpay-serial']?.trim();
+
+    let provider;
+    if (serial) {
+      const instances = await prisma.paymentProviderInstance.findMany({
+        where: { providerKey: 'wxpay', enabled: true },
+        select: { id: true, config: true },
+      });
+      const matched = instances.find((instance) => {
+        try {
+          const config = JSON.parse(decrypt(instance.config)) as Record<string, string>;
+          return config.publicKeyId === serial;
+        } catch {
+          return false;
+        }
+      });
+      if (matched) {
+        const config = JSON.parse(decrypt(matched.config)) as Record<string, string>;
+        provider = createProviderFromInstance('wxpay', matched.id, config);
+      }
+    }
+
+    if (!provider) {
+      const env = getEnv();
+      if (!env.WXPAY_PUBLIC_KEY || !env.WXPAY_MCH_ID) {
+        return Response.json({ code: 'SUCCESS', message: '成功' });
+      }
+      provider = paymentRegistry.getProvider('wxpay_direct' as PaymentType);
+    }
 
     const notification = await provider.verifyNotification(rawBody, headers);
     if (!notification) {

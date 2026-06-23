@@ -161,6 +161,25 @@ describe('EasyPay client', () => {
       const body = new URLSearchParams(init.body as string);
       expect(body.has('cid')).toBe(false);
     });
+
+    it('should fail fast with a clear error when instance config is incomplete', async () => {
+      global.fetch = vi.fn() as typeof fetch;
+
+      await expect(
+        createPayment(
+          {
+            outTradeNo: 'order-bad-instance',
+            amount: '10.00',
+            paymentType: 'wxpay',
+            clientIp: '127.0.0.1',
+            productName: 'Broken Instance Product',
+          },
+          {},
+        ),
+      ).rejects.toThrow('EasyPay instance config missing required fields: pid, pkey, apiBase, notifyUrl, returnUrl');
+
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('createPayment CID routing', () => {

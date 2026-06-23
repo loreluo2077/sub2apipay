@@ -5,7 +5,7 @@
       "username": "demo-user",
       "email": "demo-user@example.com",
       "status": "active",
-      "balance": 170.84,
+      "balance": 1170.84,
       "notes": "Primary demo account",
       "role": "user",
       "token": "mock-user-token"
@@ -39,6 +39,16 @@
       "notes": "Created from mock console",
       "role": "user",
       "token": "mock-test-user-c904f7"
+    },
+    {
+      "id": 9004,
+      "username": "test-user",
+      "email": "test-user@example.com",
+      "status": "active",
+      "balance": 100,
+      "notes": "Created from mock console",
+      "role": "user",
+      "token": "mock-test-user-1c4fc0"
     }
   ],
   "groups": [
@@ -127,7 +137,7 @@
       "user_id": 1001,
       "group_id": 201,
       "starts_at": "2026-06-19T17:10:00.283Z",
-      "expires_at": "2026-10-12T17:10:00.286Z",
+      "expires_at": "2026-11-11T17:10:00.286Z",
       "status": "active",
       "daily_usage_usd": 3.2,
       "weekly_usage_usd": 17.6,
@@ -139,7 +149,7 @@
       "assigned_at": "2026-06-19T17:10:00.283Z",
       "notes": "Seed subscription",
       "created_at": "2026-06-19T17:10:00.283Z",
-      "updated_at": "2026-06-21T18:06:39.325Z"
+      "updated_at": "2026-06-22T16:34:03.625Z"
     }
   ],
   "redeemCodes": [
@@ -222,6 +232,26 @@
       "used_by": 1001,
       "used_at": "2026-06-21T18:06:39.325Z",
       "notes": "sub2apipay subscription order:cmqo3lse20008hjiro9y5lgdd"
+    },
+    {
+      "id": 9,
+      "code": "s2p_cmqpfpt4e00072pira3o266712f9",
+      "type": "subscription",
+      "value": 29.9,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-22T16:34:03.625Z",
+      "notes": "sub2apipay subscription order:cmqpfpt4e00072pira3ofg5hw"
+    },
+    {
+      "id": 10,
+      "code": "s2p_cmqpgduwe000c2pirrus425eef32",
+      "type": "balance",
+      "value": 1000,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-22T16:52:27.473Z",
+      "notes": "sub2apipay recharge order:cmqpgduwe000c2pirruszqxm4"
     }
   ],
   "balanceLogs": [
@@ -241,7 +271,8 @@
       "money": "10.00",
       "type": "alipay",
       "status": 0,
-      "created_at": "2026-06-19T17:14:26.698Z"
+      "created_at": "2026-06-19T17:14:26.698Z",
+      "app_code": "default"
     },
     {
       "id": 2,
@@ -255,7 +286,8 @@
       "name": "YourPay 10.00 CNY",
       "status": 1,
       "created_at": "2026-06-19T17:19:23.094Z",
-      "updated_at": "2026-06-19T17:19:43.853Z"
+      "updated_at": "2026-06-19T17:19:43.853Z",
+      "app_code": "default"
     },
     {
       "id": 3,
@@ -269,7 +301,8 @@
       "name": "Claude Pro Monthly",
       "status": 1,
       "created_at": "2026-06-19T17:27:17.811Z",
-      "updated_at": "2026-06-19T17:28:53.582Z"
+      "updated_at": "2026-06-19T17:28:53.582Z",
+      "app_code": "default"
     },
     {
       "id": 4,
@@ -282,7 +315,8 @@
       "return_url": "http://localhost:3000/pay/result?order_id=cmqnbhr8w0000hvirorle7eu4&access_token=1782104380330.1001.hCwj-o_YOjguMJz7mmR356icAyikaRbg_SkjkawMsMc",
       "name": "YourPay 10.00 CNY",
       "status": 0,
-      "created_at": "2026-06-21T04:59:40.627Z"
+      "created_at": "2026-06-21T04:59:40.627Z",
+      "app_code": "default"
     },
     {
       "id": 5,
@@ -295,7 +329,8 @@
       "return_url": "http://localhost:3000/pay/result?order_id=cmqnbj17u0002hvirxoswiub4&access_token=1782104438537.1001.QsKmpMvz5LTAtKzRitSg7x4A4qyaWsl9n8809vCqyek",
       "name": "YourPay 10.00 CNY",
       "status": 0,
-      "created_at": "2026-06-21T05:00:38.776Z"
+      "created_at": "2026-06-21T05:00:38.776Z",
+      "app_code": "default"
     },
     {
       "id": 7,
@@ -308,7 +343,8 @@
       "return_url": "http://localhost:3000/pay/orders",
       "name": "Verify Order",
       "status": 0,
-      "created_at": "2026-06-21T05:18:46.772Z"
+      "created_at": "2026-06-21T05:18:46.772Z",
+      "app_code": "default"
     },
     {
       "id": 8,
@@ -323,7 +359,8 @@
       "name": "Verify Order",
       "status": 1,
       "created_at": "2026-06-21T05:19:59.923Z",
-      "updated_at": "2026-06-21T05:20:08.813Z"
+      "updated_at": "2026-06-21T05:20:08.813Z",
+      "app_code": "default"
     },
     {
       "id": 9,
@@ -338,7 +375,8 @@
       "name": "YourPay 10.00 CNY",
       "status": 1,
       "created_at": "2026-06-21T05:30:45.028Z",
-      "updated_at": "2026-06-21T05:31:07.912Z"
+      "updated_at": "2026-06-21T05:31:07.912Z",
+      "app_code": "default"
     },
     {
       "id": 10,
@@ -353,7 +391,8 @@
       "name": "Claude Pro Monthly",
       "status": 1,
       "created_at": "2026-06-21T05:32:08.834Z",
-      "updated_at": "2026-06-21T06:27:42.360Z"
+      "updated_at": "2026-06-21T06:27:42.360Z",
+      "app_code": "default"
     },
     {
       "id": 11,
@@ -368,7 +407,8 @@
       "name": "YourPay 10.00 CNY",
       "status": 1,
       "created_at": "2026-06-21T06:25:43.867Z",
-      "updated_at": "2026-06-21T06:27:52.093Z"
+      "updated_at": "2026-06-21T06:27:52.093Z",
+      "app_code": "default"
     },
     {
       "id": 12,
@@ -383,7 +423,8 @@
       "name": "YourPay 110.00 CNY",
       "status": -1,
       "created_at": "2026-06-21T06:28:24.898Z",
-      "updated_at": "2026-06-21T06:29:51.374Z"
+      "updated_at": "2026-06-21T06:29:51.374Z",
+      "app_code": "default"
     },
     {
       "id": 13,
@@ -398,7 +439,8 @@
       "name": "Sub2API 12.34 CNY",
       "status": 1,
       "created_at": "2026-06-21T18:06:14.789Z",
-      "updated_at": "2026-06-21T18:06:15.299Z"
+      "updated_at": "2026-06-21T18:06:15.299Z",
+      "app_code": "e2e_mqo3l1sc"
     },
     {
       "id": 14,
@@ -413,12 +455,134 @@
       "name": "E2E Product e2e_mqo3l1sc",
       "status": 1,
       "created_at": "2026-06-21T18:06:36.324Z",
-      "updated_at": "2026-06-21T18:06:36.767Z"
+      "updated_at": "2026-06-21T18:06:36.767Z",
+      "app_code": "e2e_mqo3l1sc"
+    },
+    {
+      "id": 15,
+      "trade_no": "MOCKPAY000015",
+      "out_trade_no": "cmqpflryl00012pir8rs8r3ke",
+      "money": "10.00",
+      "type": "wxpay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqpflryl00012pir8rs8r3ke&access_token=1782232217612.1001.56IXPuv9lUGL07q66ecU28tgeJaTXLvdmyleVNlpTpE&app_code=default",
+      "name": "Sub2API 10.00 CNY",
+      "status": 0,
+      "created_at": "2026-06-22T16:30:17.962Z",
+      "app_code": "default"
+    },
+    {
+      "id": 16,
+      "trade_no": "MOCKPAY000016",
+      "out_trade_no": "cmqpfpt4e00072pira3ofg5hw",
+      "money": "29.90",
+      "type": "wxpay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqpfpt4e00072pira3ofg5hw&access_token=1782232405881.1001.n5F8L7EEY7hmhXQM5HDPFCbVFLe21risfhTsNiasLag&app_code=default",
+      "name": "Claude Pro Monthly",
+      "status": 1,
+      "created_at": "2026-06-22T16:33:25.886Z",
+      "updated_at": "2026-06-22T16:33:58.561Z",
+      "app_code": "default"
+    },
+    {
+      "id": 17,
+      "trade_no": "MOCKPAY000017",
+      "out_trade_no": "cmqpgduwe000c2pirruszqxm4",
+      "money": "1000.00",
+      "type": "wxpay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqpgduwe000c2pirruszqxm4&access_token=1782233527117.1001.AHs7J5QGxLSj5c6f03PN4MZ-kbBaevsUJDMv0LKKkXc&app_code=default",
+      "name": "Sub2API 1000.00 CNY",
+      "status": 1,
+      "created_at": "2026-06-22T16:52:07.395Z",
+      "updated_at": "2026-06-22T16:52:24.413Z",
+      "app_code": "default"
+    },
+    {
+      "id": 18,
+      "trade_no": "MOCKPAY000018",
+      "out_trade_no": "cmqpgeok9000g2pirfciyftuk",
+      "money": "20.00",
+      "type": "wxpay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqpgeok9000g2pirfciyftuk&access_token=1782233566331.1001.mDwoM4CcFZnEnADQid2-r0hDreo__C5kzBeuUAKS8JE&app_code=default",
+      "name": "Sub2API 20.00 CNY",
+      "status": -2,
+      "created_at": "2026-06-22T16:52:46.644Z",
+      "app_code": "default",
+      "updated_at": "2026-06-23T01:23:37.673Z"
+    },
+    {
+      "id": 19,
+      "trade_no": "MOCKPAY000019",
+      "out_trade_no": "cmqpynhvk00001girexn99aob",
+      "money": "10.00",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqpynhvk00001girexn99aob&access_token=1782264209930.1001.c5-aD94O6JJYIVZFbdoXEzJi1gK37KZ0r36Y3Cl9kJo&app_code=default",
+      "name": "Sub2API 10.00 CNY",
+      "app_code": "default",
+      "status": -2,
+      "created_at": "2026-06-23T01:23:30.173Z",
+      "updated_at": "2026-06-23T01:23:55.367Z"
+    },
+    {
+      "id": 20,
+      "trade_no": "MOCKPAY000020",
+      "out_trade_no": "cmqpyojd300021giry23gypd3",
+      "money": "10.00",
+      "type": "wxpay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqpyojd300021giry23gypd3&access_token=1782264258566.1001.hDH22RUYckws_JsM9eUYd1YGjCAhufDKBLKhBnwbL1c&app_code=default",
+      "name": "Sub2API 10.00 CNY",
+      "app_code": "default",
+      "status": -2,
+      "created_at": "2026-06-23T01:24:18.811Z",
+      "updated_at": "2026-06-23T01:24:36.800Z"
+    },
+    {
+      "id": 21,
+      "trade_no": "MOCKPAY000021",
+      "out_trade_no": "cmqpysgsn00041gir17vla448",
+      "money": "10.00",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqpysgsn00041gir17vla448&access_token=1782264441659.1001.LLelbrv12tFdDgSZtlIU9j4Zy75GNxGXm7hMJdVUHaQ&app_code=default",
+      "name": "Sub2API 10.00 CNY",
+      "app_code": "default",
+      "status": 0,
+      "created_at": "2026-06-23T01:27:21.877Z"
     }
   ],
   "nextIds": {
-    "redeemCode": 9,
+    "redeemCode": 11,
     "subscription": 2,
-    "paymentSession": 15
-  }
+    "paymentSession": 22,
+    "app": 2
+  },
+  "apps": [
+    {
+      "code": "default",
+      "name": "Default App",
+      "status": "active",
+      "notes": "Default business app",
+      "created_at": "2026-06-23T01:23:30.171Z",
+      "updated_at": "2026-06-23T01:23:30.171Z"
+    }
+  ]
 }

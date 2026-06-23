@@ -21,16 +21,24 @@ import { getEnv } from '@/lib/config';
 import type { WxpayNotifyPayload, WxpayNotifyResource } from './types';
 
 export class WxpayProvider implements PaymentProvider {
-  readonly name = 'wxpay-direct';
+  readonly name: string;
   readonly providerKey = 'wxpay';
   readonly supportedTypes: PaymentType[] = ['wxpay_direct'];
   readonly defaultLimits = {
     wxpay_direct: { singleMax: 1000, dailyMax: 10000 },
   };
+  readonly instanceId?: string;
+  private instanceConfig?: Record<string, string>;
+
+  constructor(instanceId?: string, instanceConfig?: Record<string, string>) {
+    this.instanceId = instanceId;
+    this.instanceConfig = instanceConfig;
+    this.name = instanceId ? `wxpay:${instanceId}` : 'wxpay-direct';
+  }
 
   async createPayment(request: CreatePaymentRequest): Promise<CreatePaymentResponse> {
     const env = getEnv();
-    const notifyUrl = env.WXPAY_NOTIFY_URL || request.notifyUrl;
+    const notifyUrl = this.instanceConfig?.notifyUrl || env.WXPAY_NOTIFY_URL || request.notifyUrl;
     if (!notifyUrl) {
       throw new Error('WXPAY_NOTIFY_URL is required');
     }
@@ -43,6 +51,7 @@ export class WxpayProvider implements PaymentProvider {
           notify_url: notifyUrl,
           amount: request.amount,
           payer_client_ip: request.clientIp,
+          instanceConfig: this.instanceConfig,
         });
         return { tradeNo: request.orderId, payUrl: h5Url };
       } catch (err) {
@@ -57,12 +66,13 @@ export class WxpayProvider implements PaymentProvider {
       description: request.subject,
       notify_url: notifyUrl,
       amount: request.amount,
+      instanceConfig: this.instanceConfig,
     });
     return { tradeNo: request.orderId, qrCode: codeUrl };
   }
 
   async queryOrder(tradeNo: string): Promise<QueryOrderResponse> {
-    const result = await queryOrder(tradeNo);
+    const result = await queryOrder(tradeNo, this.instanceConfig);
 
     let status: 'pending' | 'paid' | 'failed' | 'refunded';
     switch (result.trade_state) {
@@ -96,7 +106,9 @@ export class WxpayProvider implements PaymentProvider {
     headers: Record<string, string>,
   ): Promise<PaymentNotification | null> {
     const env = getEnv();
-    if (!env.WXPAY_PUBLIC_KEY) {
+    const publicKey = this.instanceConfig?.publicKey || env.WXPAY_PUBLIC_KEY;
+    const publicKeyId = this.instanceConfig?.publicKeyId || env.WXPAY_PUBLIC_KEY_ID;
+    if (!publicKey) {
       throw new Error('WXPAY_PUBLIC_KEY is required for notification verification');
     }
 
@@ -112,8 +124,8 @@ export class WxpayProvider implements PaymentProvider {
     }
 
     // 验证 serial 匹配我们配置的公钥 ID
-    if (serial !== env.WXPAY_PUBLIC_KEY_ID) {
-      throw new Error(`Wxpay serial mismatch: expected ${env.WXPAY_PUBLIC_KEY_ID}, got ${serial}`);
+    if (publicKeyId && serial !== publicKeyId) {
+      throw new Error(`Wxpay serial mismatch: expected ${publicKeyId}, got ${serial}`);
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -122,7 +134,7 @@ export class WxpayProvider implements PaymentProvider {
       throw new Error('Wechatpay notification timestamp invalid or expired');
     }
 
-    const valid = await verifyNotifySign({ timestamp, nonce, body, serial, signature });
+    const valid = await verifyNotifySign({ timestamp, nonce, body, serial, signature }, this.instanceConfig);
     if (!valid) {
       throw new Error('Wxpay notification signature verification failed');
     }
@@ -137,6 +149,7 @@ export class WxpayProvider implements PaymentProvider {
       payload.resource.ciphertext,
       payload.resource.associated_data,
       payload.resource.nonce,
+      this.instanceConfig,
     );
 
     return {
@@ -149,7 +162,7 @@ export class WxpayProvider implements PaymentProvider {
   }
 
   async refund(request: RefundRequest): Promise<RefundResponse> {
-    const orderResult = await queryOrder(request.orderId);
+    const orderResult = await queryOrder(request.orderId, this.instanceConfig);
     const amount = orderResult.amount as { total?: number } | undefined;
     const totalFen = amount?.total ?? 0;
 
@@ -159,6 +172,7 @@ export class WxpayProvider implements PaymentProvider {
       amount: request.amount,
       total: totalFen / 100,
       reason: request.reason,
+      instanceConfig: this.instanceConfig,
     });
 
     return {
@@ -168,6 +182,6 @@ export class WxpayProvider implements PaymentProvider {
   }
 
   async cancelPayment(tradeNo: string): Promise<void> {
-    await closeOrder(tradeNo);
+    await closeOrder(tradeNo, this.instanceConfig);
   }
 }

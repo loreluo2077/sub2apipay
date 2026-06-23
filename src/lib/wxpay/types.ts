@@ -3,6 +3,7 @@ export interface WxpayPcOrderParams {
   description: string;
   notify_url: string;
   amount: number; // in yuan, will be converted to fen
+  instanceConfig?: Record<string, string>;
 }
 
 export interface WxpayH5OrderParams {
@@ -11,6 +12,7 @@ export interface WxpayH5OrderParams {
   notify_url: string;
   amount: number; // in yuan
   payer_client_ip: string;
+  instanceConfig?: Record<string, string>;
 }
 
 export interface WxpayRefundParams {
@@ -19,6 +21,7 @@ export interface WxpayRefundParams {
   amount: number; // refund amount in yuan
   total: number; // original total in yuan
   reason?: string;
+  instanceConfig?: Record<string, string>;
 }
 
 export interface WxpayNotifyPayload {

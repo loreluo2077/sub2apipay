@@ -23,6 +23,7 @@ import { getBizDayStartUTC } from '@/lib/time/biz-day';
 import { buildOrderResultUrl, createOrderStatusAccessToken } from '@/lib/order/status-access';
 import { getSystemConfig, getSystemConfigs } from '@/lib/system-config';
 import { selectInstance, getInstanceConfig, type LoadBalanceStrategy } from '@/lib/payment/load-balancer';
+import { createProviderFromInstance } from '@/lib/payment/provider-instance';
 import { resolveAppByCode } from '@/lib/app-context';
 
 const DEFAULT_MAX_PENDING_ORDERS = 3;
@@ -389,13 +390,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     const instanceResult = await selectInstance(app.id, provider.providerKey, strategy, input.paymentType, input.amount);
     if (instanceResult) {
-      if (provider.providerKey === 'easypay') {
-        const { EasyPayProvider } = await import('@/lib/easy-pay/provider');
-        actualProvider = new EasyPayProvider(instanceResult.instanceId, instanceResult.config);
-      } else if (provider.providerKey === 'stripe') {
-        const { StripeProvider } = await import('@/lib/stripe/provider');
-        actualProvider = new StripeProvider(instanceResult.instanceId, instanceResult.config);
-      }
+      actualProvider = createProviderFromInstance(provider.providerKey, instanceResult.instanceId, instanceResult.config);
       selectedInstanceId = instanceResult.instanceId;
     } else {
       // 检查是否有配置的实例但全部被限额过滤掉
@@ -559,9 +554,13 @@ export async function cancelOrderCore(options: {
       if (providerInstanceId) {
         const instConfig = await getInstanceConfig(providerInstanceId);
         if (instConfig) {
-          // 目前仅 easypay 支持多实例
-          const { EasyPayProvider } = await import('@/lib/easy-pay/provider');
-          provider = new EasyPayProvider(providerInstanceId, instConfig);
+          const instance = await prisma.paymentProviderInstance.findUnique({
+            where: { id: providerInstanceId },
+            select: { providerKey: true },
+          });
+          if (instance) {
+            provider = createProviderFromInstance(instance.providerKey, providerInstanceId, instConfig);
+          }
         }
       }
       if (!provider) {
@@ -1491,8 +1490,13 @@ export async function processRefund(input: RefundInput): Promise<RefundResult> {
       if (order.providerInstanceId) {
         const instConfig = await getInstanceConfig(order.providerInstanceId);
         if (instConfig) {
-          const { EasyPayProvider } = await import('@/lib/easy-pay/provider');
-          provider = new EasyPayProvider(order.providerInstanceId, instConfig);
+          const instance = await prisma.paymentProviderInstance.findUnique({
+            where: { id: order.providerInstanceId },
+            select: { providerKey: true },
+          });
+          if (instance) {
+            provider = createProviderFromInstance(instance.providerKey, order.providerInstanceId, instConfig);
+          }
         }
       }
       if (!provider) {
