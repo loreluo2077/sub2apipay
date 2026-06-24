@@ -9,7 +9,7 @@ function formatPublicKey(key: string): string {
   return `-----BEGIN PUBLIC KEY-----\n${key}\n-----END PUBLIC KEY-----`;
 }
 
-const BASE_URL = 'https://api.mch.weixin.qq.com';
+const DEFAULT_BASE_URL = 'https://api.mch.weixin.qq.com';
 
 type WxpayConfigField =
   | 'appId'
@@ -29,6 +29,7 @@ interface ResolvedWxpayConfig {
   publicKeyId?: string;
   certSerial?: string;
   notifyUrl?: string;
+  apiBase?: string;
 }
 
 function assertWxpayEnv(env: ReturnType<typeof getEnv>) {
@@ -70,6 +71,7 @@ function resolveWxpayConfig(
       publicKeyId: instanceConfig.publicKeyId,
       certSerial: instanceConfig.certSerial,
       notifyUrl: instanceConfig.notifyUrl,
+      apiBase: instanceConfig.apiBase,
     };
   }
 
@@ -83,6 +85,7 @@ function resolveWxpayConfig(
     publicKeyId: env.WXPAY_PUBLIC_KEY_ID,
     certSerial: env.WXPAY_CERT_SERIAL,
     notifyUrl: env.WXPAY_NOTIFY_URL,
+    apiBase: undefined,
   };
 }
 
@@ -96,7 +99,12 @@ function getWxpayCacheKey(config: ResolvedWxpayConfig): string {
     config.apiV3Key,
     config.publicKey || '',
     config.certSerial || '',
+    config.apiBase || '',
   ].join('::');
+}
+
+function resolveApiBase(config: ResolvedWxpayConfig): string {
+  return config.apiBase?.trim() || DEFAULT_BASE_URL;
 }
 
 function getPayInstance(instanceConfig?: Record<string, string>): WxPay {
@@ -133,6 +141,7 @@ async function request<T>(
   body?: Record<string, unknown>,
   instanceConfig?: Record<string, string>,
 ): Promise<T> {
+  const config = resolveWxpayConfig(['appId', 'mchId', 'privateKey', 'apiV3Key'], instanceConfig);
   const pay = getPayInstance(instanceConfig);
   const nonce_str = crypto.randomBytes(16).toString('hex');
   const timestamp = Math.floor(Date.now() / 1000).toString();
@@ -147,7 +156,7 @@ async function request<T>(
     'User-Agent': 'Sub2ApiPay/1.0',
   };
 
-  const res = await fetch(`${BASE_URL}${url}`, {
+  const res = await fetch(`${resolveApiBase(config)}${url}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,

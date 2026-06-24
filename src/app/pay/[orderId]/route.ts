@@ -6,6 +6,7 @@ import { buildAlipayPaymentUrl } from '@/lib/alipay/provider';
 import { deriveOrderState, getOrderDisplayState, type OrderStatusLike } from '@/lib/order/status';
 import { buildOrderResultUrl } from '@/lib/order/status-access';
 import { getSystemConfigs } from '@/lib/system-config';
+import { getInstanceConfig } from '@/lib/payment/load-balancer';
 
 export const dynamic = 'force-dynamic';
 
@@ -261,6 +262,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       expiresAt: true,
       paidAt: true,
       completedAt: true,
+      providerInstanceId: true,
       orderType: true,
       plan: { select: { productName: true, name: true } },
       subscriptionGroupId: true,
@@ -309,14 +311,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const env = getEnv();
+  const instanceConfig = order.providerInstanceId ? await getInstanceConfig(order.providerInstanceId) : null;
   const payUrl = buildAlipayPaymentUrl({
     orderId: order.id,
     amount: payAmount,
     subject,
-    notifyUrl: env.ALIPAY_NOTIFY_URL,
+    notifyUrl: instanceConfig?.notifyUrl || env.ALIPAY_NOTIFY_URL,
     returnUrl: isAlipayAppRequest(request) ? null : buildResultUrl(order.id, order.app?.code),
     isMobile: isMobileRequest(request),
-  });
+  }, instanceConfig || undefined);
 
   return renderRedirectPage(order.id, payUrl, order.app?.code);
 }

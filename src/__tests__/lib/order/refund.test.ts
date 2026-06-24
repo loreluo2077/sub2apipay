@@ -8,6 +8,7 @@ const mockOrderFindUnique = vi.fn();
 const mockOrderUpdateMany = vi.fn();
 const mockOrderUpdate = vi.fn();
 const mockAuditLogCreate = vi.fn();
+const mockPaymentProviderInstanceFindUnique = vi.fn();
 
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -18,6 +19,9 @@ vi.mock('@/lib/db', () => ({
     },
     auditLog: {
       create: (...args: unknown[]) => mockAuditLogCreate(...args),
+    },
+    paymentProviderInstance: {
+      findUnique: (...args: unknown[]) => mockPaymentProviderInstanceFindUnique(...args),
     },
   },
 }));
@@ -128,6 +132,7 @@ describe('processRefund', () => {
     mockOrderUpdate.mockResolvedValue({});
     // 默认 audit log 成功
     mockAuditLogCreate.mockResolvedValue({});
+    mockPaymentProviderInstanceFindUnique.mockResolvedValue({ providerKey: 'easypay' });
     // 默认网关退款成功
     mockProviderRefund.mockResolvedValue({ success: true });
     // 默认 subtractBalance 成功
@@ -808,6 +813,7 @@ describe('processRefund', () => {
     mockOrderFindUnique.mockResolvedValue(order);
     mockGetUser.mockResolvedValue({ id: 42, balance: 200, status: 'active' });
     mockGetInstanceConfig.mockResolvedValue({ pid: '123', key: 'abc', apiUrl: 'https://api.example.com' });
+    mockPaymentProviderInstanceFindUnique.mockResolvedValue({ providerKey: 'easypay' });
 
     const result = await processRefund({ orderId: 'order-001' });
 

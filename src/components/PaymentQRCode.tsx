@@ -117,9 +117,14 @@ export default function PaymentQRCode({
     gotoSuffix: locale === 'en' ? ' to pay' : '支付',
     openScanPrefix: locale === 'en' ? 'Open ' : '请打开',
     openScanSuffix: locale === 'en' ? ' and scan to complete payment' : '扫一扫完成支付',
+    hostedStripeHint:
+      locale === 'en'
+        ? 'This Stripe flow is provided by a mock hosted payment page for local integration testing.'
+        : '当前 Stripe 流程使用本地 mock 托管支付页，适合联调测试。',
   };
 
-  const shouldAutoRedirect = !expired && !isStripeType(paymentType) && !!payUrl && (isMobile || !qrCode);
+  const isHostedStripeFlow = isStripeType(paymentType) && !!payUrl && !clientSecret;
+  const shouldAutoRedirect = !expired && (!!payUrl && ((isStripeType(paymentType) && isHostedStripeFlow) || (!isStripeType(paymentType) && (isMobile || !qrCode))));
 
   useEffect(() => {
     if (!shouldAutoRedirect || redirected) return;
@@ -433,7 +438,31 @@ export default function PaymentQRCode({
         <>
           {isStripe ? (
             <div className="w-full max-w-md space-y-4">
-              {!clientSecret || !stripePublishableKey ? (
+              {isHostedStripeFlow ? (
+                <>
+                  <div
+                    className={[
+                      'rounded-lg border p-5 text-center',
+                      dark ? 'border-slate-700 bg-slate-900' : 'border-gray-200 bg-white',
+                    ].join(' ')}
+                  >
+                    <p className={['text-sm', dark ? 'text-slate-300' : 'text-gray-700'].join(' ')}>
+                      {t.hostedStripeHint}
+                    </p>
+                  </div>
+                  <a
+                    href={payUrl!}
+                    target={isEmbedded ? '_blank' : '_self'}
+                    rel="noopener noreferrer"
+                    className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 font-medium text-white shadow-md ${meta.buttonClass}`}
+                  >
+                    {iconSrc && <img src={iconSrc} alt={channelLabel} className="h-5 w-5 brightness-0 invert" />}
+                    {redirected
+                      ? `${t.notRedirectedPrefix}${channelLabel}`
+                      : `${t.gotoPrefix}${channelLabel}${t.gotoSuffix}`}
+                  </a>
+                </>
+              ) : !clientSecret || !stripePublishableKey ? (
                 <div
                   className={[
                     'rounded-lg border-2 border-dashed p-8 text-center',

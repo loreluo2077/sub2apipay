@@ -103,6 +103,7 @@ describe('AlipayProvider', () => {
           subject: 'Sub2API Balance Recharge 50.00 CNY',
         },
         expect.objectContaining({ method: 'alipay.trade.wap.pay' }),
+        undefined,
       );
       expect(mockExecute).not.toHaveBeenCalled();
     });
@@ -299,12 +300,17 @@ describe('AlipayProvider', () => {
       const result = await provider.refund(request);
 
       expect(result).toEqual({ refundId: 'refund-trade-no', status: 'success' });
-      expect(mockExecute).toHaveBeenCalledWith('alipay.trade.refund', {
-        out_trade_no: 'order-refund',
-        refund_amount: '12.34',
-        refund_reason: 'test refund',
-        out_request_no: 'order-refund-refund',
-      });
+      expect(mockExecute).toHaveBeenCalledWith(
+        'alipay.trade.refund',
+        {
+          out_trade_no: 'order-refund',
+          refund_amount: '12.34',
+          refund_reason: 'test refund',
+          out_request_no: 'order-refund-refund',
+        },
+        undefined,
+        undefined,
+      );
     });
   });
 
@@ -314,9 +320,14 @@ describe('AlipayProvider', () => {
 
       await provider.cancelPayment('order-close');
 
-      expect(mockExecute).toHaveBeenCalledWith('alipay.trade.close', {
-        out_trade_no: 'order-close',
-      });
+      expect(mockExecute).toHaveBeenCalledWith(
+        'alipay.trade.close',
+        {
+          out_trade_no: 'order-close',
+        },
+        undefined,
+        undefined,
+      );
     });
 
     it('should ignore ACQ.TRADE_NOT_EXIST when closing payment', async () => {

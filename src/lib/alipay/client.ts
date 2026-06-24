@@ -3,7 +3,7 @@ import { generateSign, verifyResponseSign } from './sign';
 import type { AlipayResponse } from './types';
 import { parseAlipayJsonResponseWithRaw } from './codec';
 
-const GATEWAY = 'https://openapi.alipay.com/gateway.do';
+const DEFAULT_GATEWAY = 'https://openapi.alipay.com/gateway.do';
 
 type AlipayConfigField = 'appId' | 'privateKey' | 'publicKey';
 
@@ -13,6 +13,7 @@ interface ResolvedAlipayConfig {
   publicKey: string;
   notifyUrl?: string;
   returnUrl?: string;
+  gatewayBase?: string;
 }
 
 function getCommonParams(appId: string): Record<string, string> {
@@ -53,6 +54,7 @@ function resolveAlipayConfig(
       publicKey: instanceConfig.publicKey,
       notifyUrl: instanceConfig.notifyUrl,
       returnUrl: instanceConfig.returnUrl,
+      gatewayBase: instanceConfig.gatewayBase,
     };
   }
 
@@ -63,7 +65,12 @@ function resolveAlipayConfig(
     publicKey: env.ALIPAY_PUBLIC_KEY,
     notifyUrl: env.ALIPAY_NOTIFY_URL,
     returnUrl: env.ALIPAY_RETURN_URL,
+    gatewayBase: undefined,
   };
+}
+
+function resolveGatewayBase(config: ResolvedAlipayConfig): string {
+  return config.gatewayBase?.trim() || DEFAULT_GATEWAY;
 }
 
 /**
@@ -76,6 +83,7 @@ export function pageExecute(
   instanceConfig?: Record<string, string>,
 ): string {
   const config = resolveAlipayConfig(['appId', 'privateKey', 'publicKey'], instanceConfig);
+  const gatewayBase = resolveGatewayBase(config);
 
   const params: Record<string, string> = {
     ...getCommonParams(config.appId),
@@ -93,7 +101,7 @@ export function pageExecute(
   params.sign = generateSign(params, config.privateKey);
 
   const query = new URLSearchParams(params).toString();
-  return `${GATEWAY}?${query}`;
+  return `${gatewayBase}?${query}`;
 }
 
 /**
@@ -107,6 +115,7 @@ export async function execute<T extends AlipayResponse>(
   instanceConfig?: Record<string, string>,
 ): Promise<T> {
   const config = resolveAlipayConfig(['appId', 'privateKey', 'publicKey'], instanceConfig);
+  const gatewayBase = resolveGatewayBase(config);
 
   const params: Record<string, string> = {
     ...getCommonParams(config.appId),
@@ -123,7 +132,7 @@ export async function execute<T extends AlipayResponse>(
 
   params.sign = generateSign(params, config.privateKey);
 
-  const response = await fetch(GATEWAY, {
+  const response = await fetch(gatewayBase, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params).toString(),

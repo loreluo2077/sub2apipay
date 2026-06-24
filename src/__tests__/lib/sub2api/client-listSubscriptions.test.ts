@@ -8,7 +8,7 @@ vi.mock('@/lib/config', () => ({
 }));
 
 vi.mock('@/lib/system-config', () => ({
-  getSystemConfig: () => Promise.resolve(undefined),
+  getSystemConfig: () => Promise.resolve('db-api-key-value'),
 }));
 
 import { listSubscriptions } from '@/lib/sub2api/client';

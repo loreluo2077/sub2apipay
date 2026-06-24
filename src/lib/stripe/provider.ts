@@ -24,6 +24,11 @@ export class StripeProvider implements PaymentProvider {
 
   private client: Stripe | null = null;
 
+  private isHostedMockMode(): boolean {
+    const apiBase = this.instanceConfig?.apiBase?.trim();
+    return Boolean(apiBase && /localhost:3001|127\.0\.0\.1:3001|mock-sub2api/i.test(apiBase));
+  }
+
   constructor(instanceId?: string, instanceConfig?: Record<string, string>) {
     this.instanceId = instanceId;
     this.instanceConfig = instanceConfig;
@@ -34,6 +39,16 @@ export class StripeProvider implements PaymentProvider {
     if (this.client) return this.client;
     const secretKey = this.instanceConfig?.secretKey || getEnv().STRIPE_SECRET_KEY;
     if (!secretKey) throw new Error('STRIPE_SECRET_KEY not configured');
+    const apiBase = this.instanceConfig?.apiBase?.trim();
+    if (apiBase) {
+      const parsed = new URL(apiBase);
+      this.client = new Stripe(secretKey, {
+        host: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : parsed.protocol === 'http:' ? 80 : 443,
+        protocol: parsed.protocol === 'http:' ? 'http' : 'https',
+      });
+      return this.client;
+    }
     this.client = new Stripe(secretKey);
     return this.client;
   }
@@ -49,6 +64,35 @@ export class StripeProvider implements PaymentProvider {
   }
 
   async createPayment(request: CreatePaymentRequest): Promise<CreatePaymentResponse> {
+    if (this.isHostedMockMode()) {
+      const apiBase = this.instanceConfig?.apiBase?.trim();
+      if (!apiBase) {
+        throw new Error('Stripe mock apiBase is required');
+      }
+      const formData = new URLSearchParams();
+      formData.set('amount', String(Math.round(new Prisma.Decimal(request.amount).mul(100).toNumber())));
+      formData.set('currency', 'cny');
+      formData.set('description', request.subject);
+      formData.set('metadata[orderId]', request.orderId);
+      const response = await fetch(new URL('/v1/payment_intents', apiBase), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData,
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Stripe mock hosted create failed: ${response.status} ${text}`);
+      }
+      const data = (await response.json()) as { id: string };
+      const payUrl = new URL(`/mock-pay/${data.id}`, apiBase).toString();
+      return {
+        tradeNo: data.id,
+        payUrl,
+        qrCode: payUrl,
+      };
+    }
+
     const stripe = this.getClient();
 
     const amountInCents = Math.round(new Prisma.Decimal(request.amount).mul(100).toNumber());

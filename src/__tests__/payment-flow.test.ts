@@ -289,6 +289,7 @@ describe('Payment Flow - PC/Mobile, QR/Redirect', () => {
         expect.objectContaining({
           method: 'alipay.trade.wap.pay',
         }),
+        undefined,
       );
 
       // Mobile + payUrl => shouldAutoRedirect = true
@@ -321,6 +322,7 @@ describe('Payment Flow - PC/Mobile, QR/Redirect', () => {
       expect(mockAlipayPageExecute).toHaveBeenCalledWith(
         expect.objectContaining({ product_code: 'QUICK_WAP_WAY' }),
         expect.objectContaining({ method: 'alipay.trade.wap.pay' }),
+        undefined,
       );
     });
 

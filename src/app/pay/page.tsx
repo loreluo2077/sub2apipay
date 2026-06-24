@@ -54,6 +54,8 @@ function PayContent() {
   const uiMode = searchParams.get('ui_mode') || 'standalone';
   const tab = searchParams.get('tab');
   const appCode = searchParams.get('app_code') || undefined;
+  const presetAmount = Number(searchParams.get('amount') || '');
+  const presetPaymentType = (searchParams.get('payment_type') || '').trim();
   const srcHost = searchParams.get('src_host') || undefined;
   const srcUrl = searchParams.get('src_url') || undefined;
   const locale = resolveLocale(searchParams.get('lang'));
@@ -145,6 +147,8 @@ function PayContent() {
   const hasPlans = plans.length > 0;
   // 是否可以充值（未禁用且有支付方式）
   const canTopUp = !balanceDisabled && config.enabledPaymentTypes.length > 0;
+  const initialAmount = Number.isFinite(presetAmount) && presetAmount > 0 ? presetAmount : undefined;
+  const initialPaymentType = presetPaymentType || undefined;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -848,6 +852,8 @@ function PayContent() {
                         pendingBlocked={pendingBlocked}
                         pendingCount={pendingCount}
                         locale={locale}
+                        initialAmount={initialAmount}
+                        initialPaymentType={initialPaymentType}
                       />
                     )}
 
@@ -948,6 +954,8 @@ function PayContent() {
                 pendingBlocked={pendingBlocked}
                 pendingCount={pendingCount}
                 locale={locale}
+                initialAmount={initialAmount}
+                initialPaymentType={initialPaymentType}
               />
               {renderHelpSection()}
             </div>
@@ -988,6 +996,8 @@ function PayContent() {
                     pendingBlocked={pendingBlocked}
                     pendingCount={pendingCount}
                     locale={locale}
+                    initialAmount={initialAmount}
+                    initialPaymentType={initialPaymentType}
                   />
                 ) : (
                   <MobileOrderList
@@ -1004,21 +1014,23 @@ function PayContent() {
               ) : (
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.8fr)]">
                   <div className="min-w-0">
-                    <PaymentForm
-                      userId={resolvedUserId ?? 0}
-                      userName={userInfo?.username}
-                      userBalance={userInfo?.balance}
+                <PaymentForm
+                  userId={resolvedUserId ?? 0}
+                  userName={userInfo?.username}
+                  userBalance={userInfo?.balance}
                       enabledPaymentTypes={config.enabledPaymentTypes}
                       methodLimits={config.methodLimits}
                       minAmount={config.minAmount}
                       maxAmount={config.maxAmount}
                       onSubmit={handleSubmit}
                       loading={loading}
-                      dark={isDark}
-                      pendingBlocked={pendingBlocked}
-                      pendingCount={pendingCount}
-                      locale={locale}
-                    />
+                  dark={isDark}
+                  pendingBlocked={pendingBlocked}
+                  pendingCount={pendingCount}
+                  locale={locale}
+                  initialAmount={initialAmount}
+                  initialPaymentType={initialPaymentType}
+                />
                   </div>
                   <div className="space-y-4">
                     <div

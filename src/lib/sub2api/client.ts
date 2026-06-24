@@ -8,7 +8,10 @@ const RECHARGE_MAX_ATTEMPTS = 2;
 
 async function getHeaders(idempotencyKey?: string): Promise<Record<string, string>> {
   const dbValue = await getSystemConfig('SUB2API_ADMIN_API_KEY');
-  const apiKey = dbValue?.trim() || getEnv().SUB2API_ADMIN_API_KEY;
+  const apiKey = dbValue?.trim();
+  if (!apiKey) {
+    throw new Error('SUB2API_ADMIN_API_KEY_NOT_CONFIGURED');
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-api-key': apiKey,

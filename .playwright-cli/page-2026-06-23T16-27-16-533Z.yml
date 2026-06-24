@@ -1,0 +1,735 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - heading "Mock Dashboard" [level=1] [ref=e4]
+    - generic [ref=e5]: Sub2API + payment gateway lab
+    - generic [ref=e6]:
+      - link "控制台总览" [ref=e7] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "支付会话" [ref=e8] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "支付宝 Mock" [ref=e9] [cursor=pointer]:
+        - /url: /mock-console/providers/alipay?app_code=default
+      - link "微信 Mock" [ref=e10] [cursor=pointer]:
+        - /url: /mock-console/providers/wxpay?app_code=default
+      - link "Stripe Mock" [ref=e11] [cursor=pointer]:
+        - /url: /mock-console/providers/stripe?app_code=default
+      - link "用户与订阅" [ref=e12] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "健康检查" [ref=e13] [cursor=pointer]:
+        - /url: /health?app_code=default
+    - generic [ref=e14]:
+      - strong [ref=e16]: 当前 App
+      - generic [ref=e17]: default
+  - main [ref=e18]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - heading "Mock Console" [level=1] [ref=e22]
+          - generic [ref=e23]: Local Sub2API and payment gateway console
+        - navigation [ref=e24]:
+          - link "Open Pay" [ref=e25] [cursor=pointer]:
+            - /url: http://localhost:3000/pay?token=mock-user-token&app_code=default
+          - link "Open Admin" [ref=e26] [cursor=pointer]:
+            - /url: http://localhost:3000/admin?token=dev-admin-token-2026&app_code=default
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - generic [ref=e29]:
+            - generic [ref=e30]: Current App
+            - combobox "Current App" [ref=e31]:
+              - option "Default App (default)" [selected]
+          - generic [ref=e32]:
+            - generic [ref=e33]: Open Main App
+            - generic [ref=e34]:
+              - link "Open Pay Page" [ref=e35] [cursor=pointer]:
+                - /url: http://localhost:3000/pay?token=mock-user-token&app_code=default
+              - link "Open Admin" [ref=e36] [cursor=pointer]:
+                - /url: http://localhost:3000/admin?token=dev-admin-token-2026&app_code=default
+        - generic [ref=e37]:
+          - text: "Current app:"
+          - strong [ref=e38]: Default App
+          - text: "· code:"
+          - code [ref=e39]: default
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]: Users
+          - generic [ref=e43]: "5"
+          - generic [ref=e44]: Shared test users
+        - generic [ref=e45]:
+          - generic [ref=e46]: Payments (default)
+          - generic [ref=e47]: "18"
+          - generic [ref=e48]: 8 paid / 6 pending
+        - generic [ref=e49]:
+          - generic [ref=e50]: Subscriptions
+          - generic [ref=e51]: "1"
+          - generic [ref=e52]: Cross-app mock subscriptions
+        - generic [ref=e53]:
+          - generic [ref=e54]: Groups
+          - generic [ref=e55]: "4"
+          - generic [ref=e56]: Shared product groups
+      - generic [ref=e57]:
+        - generic [ref=e58]:
+          - heading "Launch Payment Demo" [level=2] [ref=e59]
+          - generic [ref=e60]:
+            - generic [ref=e61]:
+              - generic [ref=e62]:
+                - generic [ref=e63]: User
+                - combobox "User" [ref=e64]:
+                  - option "demo-user (#1001)" [selected]
+                  - option "mock-admin (#9001)"
+                  - option "test-user (#9002)"
+                  - option "test-user (#9003)"
+                  - option "test-user (#9004)"
+              - generic [ref=e65]:
+                - generic [ref=e66]: Payment Type
+                - combobox "Payment Type" [ref=e67]:
+                  - option "支付宝 / 易支付" [selected]
+                  - option "微信 / 易支付"
+                  - option "支付宝官方"
+                  - option "微信官方"
+                  - option "Stripe"
+            - generic [ref=e68]:
+              - generic [ref=e69]:
+                - generic [ref=e70]: Amount
+                - spinbutton "Amount" [ref=e71]: "25"
+              - generic [ref=e72]:
+                - generic [ref=e73]: Preset
+                - combobox "Preset" [ref=e74]:
+                  - option "只打开支付页" [selected]
+                  - option "打开后直接模拟成功"
+                  - option "打开后直接模拟失败"
+            - generic [ref=e75]:
+              - generic [ref=e76]: 说明
+              - textbox "说明" [ref=e77]: Launch from mock dashboard
+            - button "Open Payment Flow" [ref=e78] [cursor=pointer]
+        - generic [ref=e79]:
+          - heading "Create User" [level=2] [ref=e80]
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - generic [ref=e83]:
+                - generic [ref=e84]: Username
+                - textbox "Username" [ref=e85]: test-user
+              - generic [ref=e86]:
+                - generic [ref=e87]: Email
+                - textbox "Email" [ref=e88]: test-user@example.com
+            - generic [ref=e89]:
+              - generic [ref=e90]:
+                - generic [ref=e91]: Balance
+                - spinbutton "Balance" [ref=e92]: "100"
+              - generic [ref=e93]:
+                - generic [ref=e94]: Role
+                - combobox "Role" [ref=e95]:
+                  - option "user" [selected]
+                  - option "admin"
+            - generic [ref=e96]:
+              - generic [ref=e97]: Notes
+              - textbox "Notes" [ref=e98]: Created from mock console
+            - button "Create User" [ref=e99] [cursor=pointer]
+        - generic [ref=e100]:
+          - heading "Create App" [level=2] [ref=e101]
+          - generic [ref=e102]:
+            - generic [ref=e103]:
+              - generic [ref=e104]:
+                - generic [ref=e105]: App Name
+                - textbox "App Name" [ref=e106]: Demo Shop
+              - generic [ref=e107]:
+                - generic [ref=e108]: App Code
+                - textbox "App Code" [ref=e109]: demo-shop
+            - generic [ref=e110]:
+              - generic [ref=e111]: Notes
+              - textbox "Notes" [ref=e112]: Created from dashboard
+            - button "Create App" [ref=e113] [cursor=pointer]
+        - generic [ref=e114]:
+          - heading "Assign Subscription" [level=2] [ref=e115]
+          - generic [ref=e116]:
+            - generic [ref=e117]:
+              - generic [ref=e118]:
+                - generic [ref=e119]: User
+                - combobox "User" [ref=e120]:
+                  - option "demo-user (#1001)" [selected]
+                  - option "mock-admin (#9001)"
+                  - option "test-user (#9002)"
+                  - option "test-user (#9003)"
+                  - option "test-user (#9004)"
+              - generic [ref=e121]:
+                - generic [ref=e122]: Group
+                - combobox "Group" [ref=e123]:
+                  - option "Claude Shared Pool (#101)" [selected]
+                  - option "OpenAI Fast Pool (#102)"
+                  - option "Claude Monthly Pro (#201)"
+                  - option "OpenAI Quarterly Pro (#202)"
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - generic [ref=e126]: Days
+                - spinbutton "Days" [ref=e127]: "30"
+              - generic [ref=e128]:
+                - generic [ref=e129]: Notes
+                - textbox "Notes" [ref=e130]: Manual assignment
+            - button "Assign" [ref=e131] [cursor=pointer]
+      - generic [ref=e132]:
+        - heading "Users" [level=2] [ref=e133]
+        - table [ref=e134]:
+          - rowgroup [ref=e135]:
+            - row "User Email Balance Token Actions" [ref=e136]:
+              - columnheader "User" [ref=e137]
+              - columnheader "Email" [ref=e138]
+              - columnheader "Balance" [ref=e139]
+              - columnheader "Token" [ref=e140]
+              - columnheader "Actions" [ref=e141]
+          - rowgroup [ref=e142]:
+            - 'row "demo-user #1001 · user demo-user@example.com Primary demo account ¥1183.18 mock-user-token Pay Page Orders" [ref=e143]':
+              - 'cell "demo-user #1001 · user" [ref=e144]':
+                - strong [ref=e145]: demo-user
+                - generic [ref=e146]: "#1001 · user"
+              - cell "demo-user@example.com Primary demo account" [ref=e147]:
+                - text: demo-user@example.com
+                - generic [ref=e148]: Primary demo account
+              - cell "¥1183.18" [ref=e149]
+              - cell "mock-user-token" [ref=e150]:
+                - code [ref=e151]: mock-user-token
+              - cell "Pay Page Orders" [ref=e152]:
+                - link "Pay Page" [ref=e153] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay?token=mock-user-token&app_code=default
+                - link "Orders" [ref=e154] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay/orders?token=mock-user-token&app_code=default
+            - 'row "mock-admin #9001 · admin admin@example.com Mock admin account ¥0.00 mock-admin-token Pay Page Orders" [ref=e155]':
+              - 'cell "mock-admin #9001 · admin" [ref=e156]':
+                - strong [ref=e157]: mock-admin
+                - generic [ref=e158]: "#9001 · admin"
+              - cell "admin@example.com Mock admin account" [ref=e159]:
+                - text: admin@example.com
+                - generic [ref=e160]: Mock admin account
+              - cell "¥0.00" [ref=e161]
+              - cell "mock-admin-token" [ref=e162]:
+                - code [ref=e163]: mock-admin-token
+              - cell "Pay Page Orders" [ref=e164]:
+                - link "Pay Page" [ref=e165] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay?token=mock-admin-token&app_code=default
+                - link "Orders" [ref=e166] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay/orders?token=mock-admin-token&app_code=default
+            - 'row "test-user #9002 · user test-user@example.com Created from mock console ¥100.00 mock-test-user-9ba609 Pay Page Orders" [ref=e167]':
+              - 'cell "test-user #9002 · user" [ref=e168]':
+                - strong [ref=e169]: test-user
+                - generic [ref=e170]: "#9002 · user"
+              - cell "test-user@example.com Created from mock console" [ref=e171]:
+                - text: test-user@example.com
+                - generic [ref=e172]: Created from mock console
+              - cell "¥100.00" [ref=e173]
+              - cell "mock-test-user-9ba609" [ref=e174]:
+                - code [ref=e175]: mock-test-user-9ba609
+              - cell "Pay Page Orders" [ref=e176]:
+                - link "Pay Page" [ref=e177] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay?token=mock-test-user-9ba609&app_code=default
+                - link "Orders" [ref=e178] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay/orders?token=mock-test-user-9ba609&app_code=default
+            - 'row "test-user #9003 · user test-user@example.com Created from mock console ¥100.00 mock-test-user-c904f7 Pay Page Orders" [ref=e179]':
+              - 'cell "test-user #9003 · user" [ref=e180]':
+                - strong [ref=e181]: test-user
+                - generic [ref=e182]: "#9003 · user"
+              - cell "test-user@example.com Created from mock console" [ref=e183]:
+                - text: test-user@example.com
+                - generic [ref=e184]: Created from mock console
+              - cell "¥100.00" [ref=e185]
+              - cell "mock-test-user-c904f7" [ref=e186]:
+                - code [ref=e187]: mock-test-user-c904f7
+              - cell "Pay Page Orders" [ref=e188]:
+                - link "Pay Page" [ref=e189] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay?token=mock-test-user-c904f7&app_code=default
+                - link "Orders" [ref=e190] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay/orders?token=mock-test-user-c904f7&app_code=default
+            - 'row "test-user #9004 · user test-user@example.com Created from mock console ¥100.00 mock-test-user-1c4fc0 Pay Page Orders" [ref=e191]':
+              - 'cell "test-user #9004 · user" [ref=e192]':
+                - strong [ref=e193]: test-user
+                - generic [ref=e194]: "#9004 · user"
+              - cell "test-user@example.com Created from mock console" [ref=e195]:
+                - text: test-user@example.com
+                - generic [ref=e196]: Created from mock console
+              - cell "¥100.00" [ref=e197]
+              - cell "mock-test-user-1c4fc0" [ref=e198]:
+                - code [ref=e199]: mock-test-user-1c4fc0
+              - cell "Pay Page Orders" [ref=e200]:
+                - link "Pay Page" [ref=e201] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay?token=mock-test-user-1c4fc0&app_code=default
+                - link "Orders" [ref=e202] [cursor=pointer]:
+                  - /url: http://localhost:3000/pay/orders?token=mock-test-user-1c4fc0&app_code=default
+      - generic [ref=e203]:
+        - heading "Payment Sessions" [level=2] [ref=e204]
+        - table [ref=e205]:
+          - rowgroup [ref=e206]:
+            - row "Trade Provider Amount Status Time Actions" [ref=e207]:
+              - columnheader "Trade" [ref=e208]
+              - columnheader "Provider" [ref=e209]
+              - columnheader "Amount" [ref=e210]
+              - columnheader "Status" [ref=e211]
+              - columnheader "Time" [ref=e212]
+              - columnheader "Actions" [ref=e213]
+          - rowgroup [ref=e214]:
+            - row "MOCKPAY000021 cmqpysgsn00041gir17vla448 EasyPay / alipay default ¥10.00 pending 2026-06-23T01:27:21.877Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e215]:
+              - cell "MOCKPAY000021 cmqpysgsn00041gir17vla448" [ref=e216]:
+                - strong [ref=e217]: MOCKPAY000021
+                - generic [ref=e218]: cmqpysgsn00041gir17vla448
+              - cell "EasyPay / alipay default" [ref=e219]:
+                - text: EasyPay / alipay
+                - generic [ref=e220]: default
+              - cell "¥10.00" [ref=e221]
+              - cell "pending" [ref=e222]:
+                - generic [ref=e223]: pending
+              - cell "2026-06-23T01:27:21.877Z" [ref=e224]: 2026-06-23T01:27:21.877Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e225]:
+                - link "Pay Page" [ref=e226] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000021
+                - button "Success" [ref=e228] [cursor=pointer]
+                - button "Fail" [ref=e230] [cursor=pointer]
+                - button "Cancel" [ref=e232] [cursor=pointer]
+                - button "Expire" [ref=e234] [cursor=pointer]
+                - button "Refund" [ref=e236] [cursor=pointer]
+                - button "Notify" [ref=e238] [cursor=pointer]
+            - row "MOCKPAY000020 cmqpyojd300021giry23gypd3 EasyPay / wxpay default ¥10.00 failed 2026-06-23T01:24:18.811Z 2026-06-23T01:24:36.800Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e239]:
+              - cell "MOCKPAY000020 cmqpyojd300021giry23gypd3" [ref=e240]:
+                - strong [ref=e241]: MOCKPAY000020
+                - generic [ref=e242]: cmqpyojd300021giry23gypd3
+              - cell "EasyPay / wxpay default" [ref=e243]:
+                - text: EasyPay / wxpay
+                - generic [ref=e244]: default
+              - cell "¥10.00" [ref=e245]
+              - cell "failed" [ref=e246]:
+                - generic [ref=e247]: failed
+              - cell "2026-06-23T01:24:18.811Z 2026-06-23T01:24:36.800Z" [ref=e248]:
+                - text: 2026-06-23T01:24:18.811Z
+                - generic [ref=e249]: 2026-06-23T01:24:36.800Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e250]:
+                - link "Pay Page" [ref=e251] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000020
+                - button "Success" [ref=e253] [cursor=pointer]
+                - button "Fail" [ref=e255] [cursor=pointer]
+                - button "Cancel" [ref=e257] [cursor=pointer]
+                - button "Expire" [ref=e259] [cursor=pointer]
+                - button "Refund" [ref=e261] [cursor=pointer]
+                - button "Notify" [ref=e263] [cursor=pointer]
+            - row "MOCKPAY000019 cmqpynhvk00001girexn99aob EasyPay / alipay default ¥10.00 failed 2026-06-23T01:23:30.173Z 2026-06-23T01:23:55.367Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e264]:
+              - cell "MOCKPAY000019 cmqpynhvk00001girexn99aob" [ref=e265]:
+                - strong [ref=e266]: MOCKPAY000019
+                - generic [ref=e267]: cmqpynhvk00001girexn99aob
+              - cell "EasyPay / alipay default" [ref=e268]:
+                - text: EasyPay / alipay
+                - generic [ref=e269]: default
+              - cell "¥10.00" [ref=e270]
+              - cell "failed" [ref=e271]:
+                - generic [ref=e272]: failed
+              - cell "2026-06-23T01:23:30.173Z 2026-06-23T01:23:55.367Z" [ref=e273]:
+                - text: 2026-06-23T01:23:30.173Z
+                - generic [ref=e274]: 2026-06-23T01:23:55.367Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e275]:
+                - link "Pay Page" [ref=e276] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000019
+                - button "Success" [ref=e278] [cursor=pointer]
+                - button "Fail" [ref=e280] [cursor=pointer]
+                - button "Cancel" [ref=e282] [cursor=pointer]
+                - button "Expire" [ref=e284] [cursor=pointer]
+                - button "Refund" [ref=e286] [cursor=pointer]
+                - button "Notify" [ref=e288] [cursor=pointer]
+            - row "MOCKPAY000018 cmqpgeok9000g2pirfciyftuk EasyPay / wxpay default ¥20.00 failed 2026-06-22T16:52:46.644Z 2026-06-23T01:23:37.673Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e289]:
+              - cell "MOCKPAY000018 cmqpgeok9000g2pirfciyftuk" [ref=e290]:
+                - strong [ref=e291]: MOCKPAY000018
+                - generic [ref=e292]: cmqpgeok9000g2pirfciyftuk
+              - cell "EasyPay / wxpay default" [ref=e293]:
+                - text: EasyPay / wxpay
+                - generic [ref=e294]: default
+              - cell "¥20.00" [ref=e295]
+              - cell "failed" [ref=e296]:
+                - generic [ref=e297]: failed
+              - cell "2026-06-22T16:52:46.644Z 2026-06-23T01:23:37.673Z" [ref=e298]:
+                - text: 2026-06-22T16:52:46.644Z
+                - generic [ref=e299]: 2026-06-23T01:23:37.673Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e300]:
+                - link "Pay Page" [ref=e301] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000018
+                - button "Success" [ref=e303] [cursor=pointer]
+                - button "Fail" [ref=e305] [cursor=pointer]
+                - button "Cancel" [ref=e307] [cursor=pointer]
+                - button "Expire" [ref=e309] [cursor=pointer]
+                - button "Refund" [ref=e311] [cursor=pointer]
+                - button "Notify" [ref=e313] [cursor=pointer]
+            - row "MOCKPAY000017 cmqpgduwe000c2pirruszqxm4 EasyPay / wxpay default ¥1000.00 paid 2026-06-22T16:52:07.395Z 2026-06-22T16:52:24.413Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e314]:
+              - cell "MOCKPAY000017 cmqpgduwe000c2pirruszqxm4" [ref=e315]:
+                - strong [ref=e316]: MOCKPAY000017
+                - generic [ref=e317]: cmqpgduwe000c2pirruszqxm4
+              - cell "EasyPay / wxpay default" [ref=e318]:
+                - text: EasyPay / wxpay
+                - generic [ref=e319]: default
+              - cell "¥1000.00" [ref=e320]
+              - cell "paid" [ref=e321]:
+                - generic [ref=e322]: paid
+              - cell "2026-06-22T16:52:07.395Z 2026-06-22T16:52:24.413Z" [ref=e323]:
+                - text: 2026-06-22T16:52:07.395Z
+                - generic [ref=e324]: 2026-06-22T16:52:24.413Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e325]:
+                - link "Pay Page" [ref=e326] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000017
+                - button "Success" [ref=e328] [cursor=pointer]
+                - button "Fail" [ref=e330] [cursor=pointer]
+                - button "Cancel" [ref=e332] [cursor=pointer]
+                - button "Expire" [ref=e334] [cursor=pointer]
+                - button "Refund" [ref=e336] [cursor=pointer]
+                - button "Notify" [ref=e338] [cursor=pointer]
+            - row "MOCKPAY000016 cmqpfpt4e00072pira3ofg5hw EasyPay / wxpay default ¥29.90 paid 2026-06-22T16:33:25.886Z 2026-06-22T16:33:58.561Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e339]:
+              - cell "MOCKPAY000016 cmqpfpt4e00072pira3ofg5hw" [ref=e340]:
+                - strong [ref=e341]: MOCKPAY000016
+                - generic [ref=e342]: cmqpfpt4e00072pira3ofg5hw
+              - cell "EasyPay / wxpay default" [ref=e343]:
+                - text: EasyPay / wxpay
+                - generic [ref=e344]: default
+              - cell "¥29.90" [ref=e345]
+              - cell "paid" [ref=e346]:
+                - generic [ref=e347]: paid
+              - cell "2026-06-22T16:33:25.886Z 2026-06-22T16:33:58.561Z" [ref=e348]:
+                - text: 2026-06-22T16:33:25.886Z
+                - generic [ref=e349]: 2026-06-22T16:33:58.561Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e350]:
+                - link "Pay Page" [ref=e351] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000016
+                - button "Success" [ref=e353] [cursor=pointer]
+                - button "Fail" [ref=e355] [cursor=pointer]
+                - button "Cancel" [ref=e357] [cursor=pointer]
+                - button "Expire" [ref=e359] [cursor=pointer]
+                - button "Refund" [ref=e361] [cursor=pointer]
+                - button "Notify" [ref=e363] [cursor=pointer]
+            - row "MOCKPAY000015 cmqpflryl00012pir8rs8r3ke EasyPay / wxpay default ¥10.00 pending 2026-06-22T16:30:17.962Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e364]:
+              - cell "MOCKPAY000015 cmqpflryl00012pir8rs8r3ke" [ref=e365]:
+                - strong [ref=e366]: MOCKPAY000015
+                - generic [ref=e367]: cmqpflryl00012pir8rs8r3ke
+              - cell "EasyPay / wxpay default" [ref=e368]:
+                - text: EasyPay / wxpay
+                - generic [ref=e369]: default
+              - cell "¥10.00" [ref=e370]
+              - cell "pending" [ref=e371]:
+                - generic [ref=e372]: pending
+              - cell "2026-06-22T16:30:17.962Z" [ref=e373]: 2026-06-22T16:30:17.962Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e374]:
+                - link "Pay Page" [ref=e375] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000015
+                - button "Success" [ref=e377] [cursor=pointer]
+                - button "Fail" [ref=e379] [cursor=pointer]
+                - button "Cancel" [ref=e381] [cursor=pointer]
+                - button "Expire" [ref=e383] [cursor=pointer]
+                - button "Refund" [ref=e385] [cursor=pointer]
+                - button "Notify" [ref=e387] [cursor=pointer]
+            - row "MOCKPAY000012 cmqnenvu6000ctmirzz05y3w9 EasyPay / alipay default ¥110.00 refunded 2026-06-21T06:28:24.898Z 2026-06-21T06:29:51.374Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e388]:
+              - cell "MOCKPAY000012 cmqnenvu6000ctmirzz05y3w9" [ref=e389]:
+                - strong [ref=e390]: MOCKPAY000012
+                - generic [ref=e391]: cmqnenvu6000ctmirzz05y3w9
+              - cell "EasyPay / alipay default" [ref=e392]:
+                - text: EasyPay / alipay
+                - generic [ref=e393]: default
+              - cell "¥110.00" [ref=e394]
+              - cell "refunded" [ref=e395]:
+                - generic [ref=e396]: refunded
+              - cell "2026-06-21T06:28:24.898Z 2026-06-21T06:29:51.374Z" [ref=e397]:
+                - text: 2026-06-21T06:28:24.898Z
+                - generic [ref=e398]: 2026-06-21T06:29:51.374Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e399]:
+                - link "Pay Page" [ref=e400] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000012
+                - button "Success" [ref=e402] [cursor=pointer]
+                - button "Fail" [ref=e404] [cursor=pointer]
+                - button "Cancel" [ref=e406] [cursor=pointer]
+                - button "Expire" [ref=e408] [cursor=pointer]
+                - button "Refund" [ref=e410] [cursor=pointer]
+                - button "Notify" [ref=e412] [cursor=pointer]
+            - row "MOCKPAY000011 cmqnekfvc0008tmirgdavbso3 EasyPay / alipay default ¥10.00 paid 2026-06-21T06:25:43.867Z 2026-06-21T06:27:52.093Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e413]:
+              - cell "MOCKPAY000011 cmqnekfvc0008tmirgdavbso3" [ref=e414]:
+                - strong [ref=e415]: MOCKPAY000011
+                - generic [ref=e416]: cmqnekfvc0008tmirgdavbso3
+              - cell "EasyPay / alipay default" [ref=e417]:
+                - text: EasyPay / alipay
+                - generic [ref=e418]: default
+              - cell "¥10.00" [ref=e419]
+              - cell "paid" [ref=e420]:
+                - generic [ref=e421]: paid
+              - cell "2026-06-21T06:25:43.867Z 2026-06-21T06:27:52.093Z" [ref=e422]:
+                - text: 2026-06-21T06:25:43.867Z
+                - generic [ref=e423]: 2026-06-21T06:27:52.093Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e424]:
+                - link "Pay Page" [ref=e425] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000011
+                - button "Success" [ref=e427] [cursor=pointer]
+                - button "Fail" [ref=e429] [cursor=pointer]
+                - button "Cancel" [ref=e431] [cursor=pointer]
+                - button "Expire" [ref=e433] [cursor=pointer]
+                - button "Refund" [ref=e435] [cursor=pointer]
+                - button "Notify" [ref=e437] [cursor=pointer]
+            - row "MOCKPAY000010 cmqncnjbu0004tmir8ga9kpaa EasyPay / alipay default ¥29.90 paid 2026-06-21T05:32:08.834Z 2026-06-21T06:27:42.360Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e438]:
+              - cell "MOCKPAY000010 cmqncnjbu0004tmir8ga9kpaa" [ref=e439]:
+                - strong [ref=e440]: MOCKPAY000010
+                - generic [ref=e441]: cmqncnjbu0004tmir8ga9kpaa
+              - cell "EasyPay / alipay default" [ref=e442]:
+                - text: EasyPay / alipay
+                - generic [ref=e443]: default
+              - cell "¥29.90" [ref=e444]
+              - cell "paid" [ref=e445]:
+                - generic [ref=e446]: paid
+              - cell "2026-06-21T05:32:08.834Z 2026-06-21T06:27:42.360Z" [ref=e447]:
+                - text: 2026-06-21T05:32:08.834Z
+                - generic [ref=e448]: 2026-06-21T06:27:42.360Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e449]:
+                - link "Pay Page" [ref=e450] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000010
+                - button "Success" [ref=e452] [cursor=pointer]
+                - button "Fail" [ref=e454] [cursor=pointer]
+                - button "Cancel" [ref=e456] [cursor=pointer]
+                - button "Expire" [ref=e458] [cursor=pointer]
+                - button "Refund" [ref=e460] [cursor=pointer]
+                - button "Notify" [ref=e462] [cursor=pointer]
+            - row "MOCKPAY000009 cmqnclpt90000tmirrm03ylbs EasyPay / alipay default ¥10.00 paid 2026-06-21T05:30:45.028Z 2026-06-21T05:31:07.912Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e463]:
+              - cell "MOCKPAY000009 cmqnclpt90000tmirrm03ylbs" [ref=e464]:
+                - strong [ref=e465]: MOCKPAY000009
+                - generic [ref=e466]: cmqnclpt90000tmirrm03ylbs
+              - cell "EasyPay / alipay default" [ref=e467]:
+                - text: EasyPay / alipay
+                - generic [ref=e468]: default
+              - cell "¥10.00" [ref=e469]
+              - cell "paid" [ref=e470]:
+                - generic [ref=e471]: paid
+              - cell "2026-06-21T05:30:45.028Z 2026-06-21T05:31:07.912Z" [ref=e472]:
+                - text: 2026-06-21T05:30:45.028Z
+                - generic [ref=e473]: 2026-06-21T05:31:07.912Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e474]:
+                - link "Pay Page" [ref=e475] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000009
+                - button "Success" [ref=e477] [cursor=pointer]
+                - button "Fail" [ref=e479] [cursor=pointer]
+                - button "Cancel" [ref=e481] [cursor=pointer]
+                - button "Expire" [ref=e483] [cursor=pointer]
+                - button "Refund" [ref=e485] [cursor=pointer]
+                - button "Notify" [ref=e487] [cursor=pointer]
+            - row "MOCKPAY000008 VERIFY_FROM_CODEX_003 EasyPay / wxpay default ¥3.45 paid 2026-06-21T05:19:59.923Z 2026-06-21T05:20:08.813Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e488]:
+              - cell "MOCKPAY000008 VERIFY_FROM_CODEX_003" [ref=e489]:
+                - strong [ref=e490]: MOCKPAY000008
+                - generic [ref=e491]: VERIFY_FROM_CODEX_003
+              - cell "EasyPay / wxpay default" [ref=e492]:
+                - text: EasyPay / wxpay
+                - generic [ref=e493]: default
+              - cell "¥3.45" [ref=e494]
+              - cell "paid" [ref=e495]:
+                - generic [ref=e496]: paid
+              - cell "2026-06-21T05:19:59.923Z 2026-06-21T05:20:08.813Z" [ref=e497]:
+                - text: 2026-06-21T05:19:59.923Z
+                - generic [ref=e498]: 2026-06-21T05:20:08.813Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e499]:
+                - link "Pay Page" [ref=e500] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000008
+                - button "Success" [ref=e502] [cursor=pointer]
+                - button "Fail" [ref=e504] [cursor=pointer]
+                - button "Cancel" [ref=e506] [cursor=pointer]
+                - button "Expire" [ref=e508] [cursor=pointer]
+                - button "Refund" [ref=e510] [cursor=pointer]
+                - button "Notify" [ref=e512] [cursor=pointer]
+            - row "MOCKPAY000007 VERIFY_FROM_CODEX_001 EasyPay / alipay default ¥1.23 pending 2026-06-21T05:18:46.772Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e513]:
+              - cell "MOCKPAY000007 VERIFY_FROM_CODEX_001" [ref=e514]:
+                - strong [ref=e515]: MOCKPAY000007
+                - generic [ref=e516]: VERIFY_FROM_CODEX_001
+              - cell "EasyPay / alipay default" [ref=e517]:
+                - text: EasyPay / alipay
+                - generic [ref=e518]: default
+              - cell "¥1.23" [ref=e519]
+              - cell "pending" [ref=e520]:
+                - generic [ref=e521]: pending
+              - cell "2026-06-21T05:18:46.772Z" [ref=e522]: 2026-06-21T05:18:46.772Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e523]:
+                - link "Pay Page" [ref=e524] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000007
+                - button "Success" [ref=e526] [cursor=pointer]
+                - button "Fail" [ref=e528] [cursor=pointer]
+                - button "Cancel" [ref=e530] [cursor=pointer]
+                - button "Expire" [ref=e532] [cursor=pointer]
+                - button "Refund" [ref=e534] [cursor=pointer]
+                - button "Notify" [ref=e536] [cursor=pointer]
+            - row "MOCKPAY000005 cmqnbj17u0002hvirxoswiub4 EasyPay / alipay default ¥10.00 pending 2026-06-21T05:00:38.776Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e537]:
+              - cell "MOCKPAY000005 cmqnbj17u0002hvirxoswiub4" [ref=e538]:
+                - strong [ref=e539]: MOCKPAY000005
+                - generic [ref=e540]: cmqnbj17u0002hvirxoswiub4
+              - cell "EasyPay / alipay default" [ref=e541]:
+                - text: EasyPay / alipay
+                - generic [ref=e542]: default
+              - cell "¥10.00" [ref=e543]
+              - cell "pending" [ref=e544]:
+                - generic [ref=e545]: pending
+              - cell "2026-06-21T05:00:38.776Z" [ref=e546]: 2026-06-21T05:00:38.776Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e547]:
+                - link "Pay Page" [ref=e548] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000005
+                - button "Success" [ref=e550] [cursor=pointer]
+                - button "Fail" [ref=e552] [cursor=pointer]
+                - button "Cancel" [ref=e554] [cursor=pointer]
+                - button "Expire" [ref=e556] [cursor=pointer]
+                - button "Refund" [ref=e558] [cursor=pointer]
+                - button "Notify" [ref=e560] [cursor=pointer]
+            - row "MOCKPAY000004 cmqnbhr8w0000hvirorle7eu4 EasyPay / alipay default ¥10.00 pending 2026-06-21T04:59:40.627Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e561]:
+              - cell "MOCKPAY000004 cmqnbhr8w0000hvirorle7eu4" [ref=e562]:
+                - strong [ref=e563]: MOCKPAY000004
+                - generic [ref=e564]: cmqnbhr8w0000hvirorle7eu4
+              - cell "EasyPay / alipay default" [ref=e565]:
+                - text: EasyPay / alipay
+                - generic [ref=e566]: default
+              - cell "¥10.00" [ref=e567]
+              - cell "pending" [ref=e568]:
+                - generic [ref=e569]: pending
+              - cell "2026-06-21T04:59:40.627Z" [ref=e570]: 2026-06-21T04:59:40.627Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e571]:
+                - link "Pay Page" [ref=e572] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000004
+                - button "Success" [ref=e574] [cursor=pointer]
+                - button "Fail" [ref=e576] [cursor=pointer]
+                - button "Cancel" [ref=e578] [cursor=pointer]
+                - button "Expire" [ref=e580] [cursor=pointer]
+                - button "Refund" [ref=e582] [cursor=pointer]
+                - button "Notify" [ref=e584] [cursor=pointer]
+            - row "MOCKPAY000003 cmql7biv10006okir81i86mmh EasyPay / alipay default ¥29.90 paid 2026-06-19T17:27:17.811Z 2026-06-19T17:28:53.582Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e585]:
+              - cell "MOCKPAY000003 cmql7biv10006okir81i86mmh" [ref=e586]:
+                - strong [ref=e587]: MOCKPAY000003
+                - generic [ref=e588]: cmql7biv10006okir81i86mmh
+              - cell "EasyPay / alipay default" [ref=e589]:
+                - text: EasyPay / alipay
+                - generic [ref=e590]: default
+              - cell "¥29.90" [ref=e591]
+              - cell "paid" [ref=e592]:
+                - generic [ref=e593]: paid
+              - cell "2026-06-19T17:27:17.811Z 2026-06-19T17:28:53.582Z" [ref=e594]:
+                - text: 2026-06-19T17:27:17.811Z
+                - generic [ref=e595]: 2026-06-19T17:28:53.582Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e596]:
+                - link "Pay Page" [ref=e597] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000003
+                - button "Success" [ref=e599] [cursor=pointer]
+                - button "Fail" [ref=e601] [cursor=pointer]
+                - button "Cancel" [ref=e603] [cursor=pointer]
+                - button "Expire" [ref=e605] [cursor=pointer]
+                - button "Refund" [ref=e607] [cursor=pointer]
+                - button "Notify" [ref=e609] [cursor=pointer]
+            - row "MOCKPAY000002 cmql71btf0002okirarxje9su EasyPay / alipay default ¥10.00 paid 2026-06-19T17:19:23.094Z 2026-06-19T17:19:43.853Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e610]:
+              - cell "MOCKPAY000002 cmql71btf0002okirarxje9su" [ref=e611]:
+                - strong [ref=e612]: MOCKPAY000002
+                - generic [ref=e613]: cmql71btf0002okirarxje9su
+              - cell "EasyPay / alipay default" [ref=e614]:
+                - text: EasyPay / alipay
+                - generic [ref=e615]: default
+              - cell "¥10.00" [ref=e616]
+              - cell "paid" [ref=e617]:
+                - generic [ref=e618]: paid
+              - cell "2026-06-19T17:19:23.094Z 2026-06-19T17:19:43.853Z" [ref=e619]:
+                - text: 2026-06-19T17:19:23.094Z
+                - generic [ref=e620]: 2026-06-19T17:19:43.853Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e621]:
+                - link "Pay Page" [ref=e622] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000002
+                - button "Success" [ref=e624] [cursor=pointer]
+                - button "Fail" [ref=e626] [cursor=pointer]
+                - button "Cancel" [ref=e628] [cursor=pointer]
+                - button "Expire" [ref=e630] [cursor=pointer]
+                - button "Refund" [ref=e632] [cursor=pointer]
+                - button "Notify" [ref=e634] [cursor=pointer]
+            - row "MOCKPAY000001 cmql6v07u0000okirzm6n40j7 EasyPay / alipay default ¥10.00 pending 2026-06-19T17:14:26.698Z Pay Page Success Fail Cancel Expire Refund Notify" [ref=e635]:
+              - cell "MOCKPAY000001 cmql6v07u0000okirzm6n40j7" [ref=e636]:
+                - strong [ref=e637]: MOCKPAY000001
+                - generic [ref=e638]: cmql6v07u0000okirzm6n40j7
+              - cell "EasyPay / alipay default" [ref=e639]:
+                - text: EasyPay / alipay
+                - generic [ref=e640]: default
+              - cell "¥10.00" [ref=e641]
+              - cell "pending" [ref=e642]:
+                - generic [ref=e643]: pending
+              - cell "2026-06-19T17:14:26.698Z" [ref=e644]: 2026-06-19T17:14:26.698Z
+              - cell "Pay Page Success Fail Cancel Expire Refund Notify" [ref=e645]:
+                - link "Pay Page" [ref=e646] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000001
+                - button "Success" [ref=e648] [cursor=pointer]
+                - button "Fail" [ref=e650] [cursor=pointer]
+                - button "Cancel" [ref=e652] [cursor=pointer]
+                - button "Expire" [ref=e654] [cursor=pointer]
+                - button "Refund" [ref=e656] [cursor=pointer]
+                - button "Notify" [ref=e658] [cursor=pointer]
+      - generic [ref=e659]:
+        - heading "Apps" [level=2] [ref=e660]
+        - table [ref=e661]:
+          - rowgroup [ref=e662]:
+            - row "Name Code Status Created" [ref=e663]:
+              - columnheader "Name" [ref=e664]
+              - columnheader "Code" [ref=e665]
+              - columnheader "Status" [ref=e666]
+              - columnheader "Created" [ref=e667]
+          - rowgroup [ref=e668]:
+            - row "Default App Default business app default active 2026-06-23T01:23:30.171Z" [ref=e669]:
+              - cell "Default App Default business app" [ref=e670]:
+                - strong [ref=e671]: Default App
+                - generic [ref=e672]: Default business app
+              - cell "default" [ref=e673]:
+                - code [ref=e674]: default
+              - cell "active" [ref=e675]:
+                - generic [ref=e676]: active
+              - cell "2026-06-23T01:23:30.171Z" [ref=e677]
+      - generic [ref=e678]:
+        - heading "Subscriptions" [level=2] [ref=e679]
+        - table [ref=e680]:
+          - rowgroup [ref=e681]:
+            - row "User Group Status Expires At Actions" [ref=e682]:
+              - columnheader "User" [ref=e683]
+              - columnheader "Group" [ref=e684]
+              - columnheader "Status" [ref=e685]
+              - columnheader "Expires At" [ref=e686]
+              - columnheader "Actions" [ref=e687]
+          - rowgroup [ref=e688]:
+            - row "demo-user Claude Monthly Pro active 2026-12-11T17:10:00.286Z +30 days -30 days" [ref=e689]:
+              - cell "demo-user" [ref=e690]
+              - cell "Claude Monthly Pro" [ref=e691]
+              - cell "active" [ref=e692]:
+                - generic [ref=e693]: active
+              - cell "2026-12-11T17:10:00.286Z" [ref=e694]
+              - cell "+30 days -30 days" [ref=e695]:
+                - button "+30 days" [ref=e697] [cursor=pointer]
+                - button "-30 days" [ref=e699] [cursor=pointer]
+      - generic [ref=e700]:
+        - heading "Groups" [level=2] [ref=e701]
+        - table [ref=e702]:
+          - rowgroup [ref=e703]:
+            - row "Group Type Status Rate Limits D/W/M" [ref=e704]:
+              - columnheader "Group" [ref=e705]
+              - columnheader "Type" [ref=e706]
+              - columnheader "Status" [ref=e707]
+              - columnheader "Rate" [ref=e708]
+              - columnheader "Limits D/W/M" [ref=e709]
+          - rowgroup [ref=e710]:
+            - 'row "Claude Shared Pool #101 · claude standard active 0.15 - / - / -" [ref=e711]':
+              - 'cell "Claude Shared Pool #101 · claude" [ref=e712]':
+                - strong [ref=e713]: Claude Shared Pool
+                - generic [ref=e714]: "#101 · claude"
+              - cell "standard" [ref=e715]:
+                - generic [ref=e716]: standard
+              - cell "active" [ref=e717]
+              - cell "0.15" [ref=e718]
+              - cell "- / - / -" [ref=e719]
+            - 'row "OpenAI Fast Pool #102 · openai standard active 0.2 - / - / -" [ref=e720]':
+              - 'cell "OpenAI Fast Pool #102 · openai" [ref=e721]':
+                - strong [ref=e722]: OpenAI Fast Pool
+                - generic [ref=e723]: "#102 · openai"
+              - cell "standard" [ref=e724]:
+                - generic [ref=e725]: standard
+              - cell "active" [ref=e726]
+              - cell "0.2" [ref=e727]
+              - cell "- / - / -" [ref=e728]
+            - 'row "Claude Monthly Pro #201 · claude subscription active 0.12 20 / - / 300" [ref=e729]':
+              - 'cell "Claude Monthly Pro #201 · claude" [ref=e730]':
+                - strong [ref=e731]: Claude Monthly Pro
+                - generic [ref=e732]: "#201 · claude"
+              - cell "subscription" [ref=e733]:
+                - generic [ref=e734]: subscription
+              - cell "active" [ref=e735]
+              - cell "0.12" [ref=e736]
+              - cell "20 / - / 300" [ref=e737]
+            - 'row "OpenAI Quarterly Pro #202 · openai subscription active 0.08 50 / 200 / 1200" [ref=e738]':
+              - 'cell "OpenAI Quarterly Pro #202 · openai" [ref=e739]':
+                - strong [ref=e740]: OpenAI Quarterly Pro
+                - generic [ref=e741]: "#202 · openai"
+              - cell "subscription" [ref=e742]:
+                - generic [ref=e743]: subscription
+              - cell "active" [ref=e744]
+              - cell "0.08" [ref=e745]
+              - cell "50 / 200 / 1200" [ref=e746]

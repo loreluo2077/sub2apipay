@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Locale } from '@/lib/locale';
 import { PAYMENT_TYPE_META, getPaymentIconType, getPaymentMeta, getPaymentDisplayInfo } from '@/lib/pay-utils';
 
@@ -31,6 +31,8 @@ interface PaymentFormProps {
   locale?: Locale;
   /** 固定金额模式：隐藏金额选择，只显示支付方式和提交按钮 */
   fixedAmount?: number;
+  initialAmount?: number;
+  initialPaymentType?: string;
 }
 
 const QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000, 2000];
@@ -55,10 +57,34 @@ export default function PaymentForm({
   pendingCount = 0,
   locale = 'zh',
   fixedAmount,
+  initialAmount,
+  initialPaymentType,
 }: PaymentFormProps) {
-  const [amount, setAmount] = useState<number | ''>(fixedAmount ?? '');
-  const [paymentType, setPaymentType] = useState(enabledPaymentTypes[0] || 'alipay');
-  const [customAmount, setCustomAmount] = useState(fixedAmount ? String(fixedAmount) : '');
+  const resolvedInitialAmount = fixedAmount ?? initialAmount ?? undefined;
+  const resolvedInitialPaymentType =
+    initialPaymentType && enabledPaymentTypes.includes(initialPaymentType)
+      ? initialPaymentType
+      : enabledPaymentTypes[0] || 'alipay';
+
+  const [amount, setAmount] = useState<number | ''>(resolvedInitialAmount ?? '');
+  const [paymentType, setPaymentType] = useState(resolvedInitialPaymentType);
+  const [customAmount, setCustomAmount] = useState(resolvedInitialAmount ? String(resolvedInitialAmount) : '');
+
+  useEffect(() => {
+    if (resolvedInitialAmount !== undefined) {
+      setAmount(resolvedInitialAmount);
+      setCustomAmount(String(resolvedInitialAmount));
+      return;
+    }
+    if (fixedAmount !== undefined) {
+      setAmount(fixedAmount);
+      setCustomAmount(String(fixedAmount));
+    }
+  }, [resolvedInitialAmount, fixedAmount]);
+
+  useEffect(() => {
+    setPaymentType(resolvedInitialPaymentType);
+  }, [resolvedInitialPaymentType]);
 
   const effectivePaymentType = enabledPaymentTypes.includes(paymentType)
     ? paymentType

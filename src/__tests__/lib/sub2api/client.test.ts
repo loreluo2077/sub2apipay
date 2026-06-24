@@ -29,7 +29,7 @@ import {
 describe('Sub2API Client', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    mockGetSystemConfig.mockResolvedValue(undefined);
+    mockGetSystemConfig.mockResolvedValue('db-api-key-value');
   });
 
   // ── getCurrentUserByToken ──
@@ -73,18 +73,9 @@ describe('Sub2API Client', () => {
     expect(headers['x-api-key']).toBe('db-api-key-value');
   });
 
-  it('falls back to env API key when DB returns empty', async () => {
+  it('throws clear error when DB API key is missing', async () => {
     mockGetSystemConfig.mockResolvedValue('  ');
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: { id: 1 } }),
-    }) as typeof fetch;
-
-    await getUser(1);
-
-    const fetchCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    const headers = fetchCall[1].headers as Record<string, string>;
-    expect(headers['x-api-key']).toBe('admin-testkey123');
+    await expect(getUser(1)).rejects.toThrow('SUB2API_ADMIN_API_KEY_NOT_CONFIGURED');
   });
 
   // ── getUser ──

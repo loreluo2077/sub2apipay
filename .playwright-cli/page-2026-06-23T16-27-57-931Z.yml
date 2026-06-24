@@ -1,0 +1,91 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - heading "Mock Dashboard" [level=1] [ref=e4]
+    - generic [ref=e5]: Sub2API + payment gateway lab
+    - generic [ref=e6]:
+      - link "控制台总览" [ref=e7] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "支付会话" [ref=e8] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "支付宝 Mock" [ref=e9] [cursor=pointer]:
+        - /url: /mock-console/providers/alipay?app_code=default
+      - link "微信 Mock" [ref=e10] [cursor=pointer]:
+        - /url: /mock-console/providers/wxpay?app_code=default
+      - link "Stripe Mock" [ref=e11] [cursor=pointer]:
+        - /url: /mock-console/providers/stripe?app_code=default
+      - link "用户与订阅" [ref=e12] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "健康检查" [ref=e13] [cursor=pointer]:
+        - /url: /health?app_code=default
+    - generic [ref=e14]:
+      - strong [ref=e16]: 当前 App
+      - generic [ref=e17]: default
+  - main [ref=e18]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - heading "Alipay Official Mock" [level=1] [ref=e22]
+          - generic [ref=e23]: Local Sub2API and payment gateway console
+        - navigation [ref=e24]:
+          - link "Open Pay" [ref=e25] [cursor=pointer]:
+            - /url: http://localhost:3000/pay?token=mock-user-token&app_code=default
+          - link "Open Admin" [ref=e26] [cursor=pointer]:
+            - /url: http://localhost:3000/admin?token=dev-admin-token-2026&app_code=default
+      - generic [ref=e27]:
+        - heading "Alipay Official Control" [level=2] [ref=e28]
+        - generic [ref=e29]:
+          - text: "Current app:"
+          - strong [ref=e30]: Default App
+          - text: "· code:"
+          - code [ref=e31]: default
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - heading "Create Mock Session" [level=2] [ref=e34]
+          - generic [ref=e35]:
+            - generic [ref=e36]:
+              - generic [ref=e37]:
+                - generic [ref=e38]: Order ID
+                - textbox "Order ID" [ref=e39]: manual-alipay-1782232077241
+              - generic [ref=e40]:
+                - generic [ref=e41]: Type
+                - combobox "Type" [ref=e42]:
+                  - option "alipay_direct" [selected]
+            - generic [ref=e43]:
+              - generic [ref=e44]:
+                - generic [ref=e45]: Amount
+                - spinbutton "Amount" [ref=e46]: "12.34"
+              - generic [ref=e47]:
+                - generic [ref=e48]: Notify URL
+                - textbox "Notify URL" [ref=e49]:
+                  - /placeholder: https://host/api/notify
+            - generic [ref=e50]:
+              - generic [ref=e51]:
+                - generic [ref=e52]: App Code
+                - textbox "App Code" [ref=e53]: default
+              - generic [ref=e54]:
+                - generic [ref=e55]: Name
+                - textbox "Name" [ref=e56]: Alipay Official Demo
+            - button "Create Session" [ref=e57] [cursor=pointer]
+        - generic [ref=e58]:
+          - heading "Quick Links" [level=2] [ref=e59]
+          - generic [ref=e60]:
+            - link "Back Dashboard" [ref=e61] [cursor=pointer]:
+              - /url: /mock-console?app_code=default
+            - link "Open Main Admin" [ref=e62] [cursor=pointer]:
+              - /url: http://localhost:3000/admin?token=dev-admin-token-2026&app_code=default
+            - link "Open Main Pay" [ref=e63] [cursor=pointer]:
+              - /url: http://localhost:3000/pay?token=mock-user-token&app_code=default
+      - generic [ref=e64]:
+        - heading "Alipay Official Sessions" [level=2] [ref=e65]
+        - table [ref=e66]:
+          - rowgroup [ref=e67]:
+            - row "Trade Type Amount Status Created Actions" [ref=e68]:
+              - columnheader "Trade" [ref=e69]
+              - columnheader "Type" [ref=e70]
+              - columnheader "Amount" [ref=e71]
+              - columnheader "Status" [ref=e72]
+              - columnheader "Created" [ref=e73]
+              - columnheader "Actions" [ref=e74]
+          - rowgroup [ref=e75]:
+            - row "No sessions yet." [ref=e76]:
+              - cell "No sessions yet." [ref=e77]

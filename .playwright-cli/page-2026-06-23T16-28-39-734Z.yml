@@ -1,0 +1,105 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - heading "Mock Dashboard" [level=1] [ref=e4]
+    - generic [ref=e5]: Sub2API + payment gateway lab
+    - generic [ref=e6]:
+      - link "控制台总览" [ref=e7] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "支付会话" [ref=e8] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "支付宝 Mock" [ref=e9] [cursor=pointer]:
+        - /url: /mock-console/providers/alipay?app_code=default
+      - link "微信 Mock" [ref=e10] [cursor=pointer]:
+        - /url: /mock-console/providers/wxpay?app_code=default
+      - link "Stripe Mock" [ref=e11] [cursor=pointer]:
+        - /url: /mock-console/providers/stripe?app_code=default
+      - link "用户与订阅" [ref=e12] [cursor=pointer]:
+        - /url: /mock-console?app_code=default
+      - link "健康检查" [ref=e13] [cursor=pointer]:
+        - /url: /health?app_code=default
+    - generic [ref=e14]:
+      - strong [ref=e16]: 当前 App
+      - generic [ref=e17]: default
+  - main [ref=e18]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - heading "Alipay Official Mock" [level=1] [ref=e22]
+          - generic [ref=e23]: Local Sub2API and payment gateway console
+        - navigation [ref=e24]:
+          - link "Open Pay" [ref=e25] [cursor=pointer]:
+            - /url: http://localhost:3000/pay?token=mock-user-token&app_code=default
+          - link "Open Admin" [ref=e26] [cursor=pointer]:
+            - /url: http://localhost:3000/admin?token=dev-admin-token-2026&app_code=default
+      - strong [ref=e28]: Created Alipay Official session MOCKPAY000024
+      - generic [ref=e29]:
+        - heading "Alipay Official Control" [level=2] [ref=e30]
+        - generic [ref=e31]:
+          - text: "Current app:"
+          - strong [ref=e32]: Default App
+          - text: "· code:"
+          - code [ref=e33]: default
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - heading "Create Mock Session" [level=2] [ref=e36]
+          - generic [ref=e37]:
+            - generic [ref=e38]:
+              - generic [ref=e39]:
+                - generic [ref=e40]: Order ID
+                - textbox "Order ID" [ref=e41]: manual-alipay-1782232119089
+              - generic [ref=e42]:
+                - generic [ref=e43]: Type
+                - combobox "Type" [ref=e44]:
+                  - option "alipay_direct" [selected]
+            - generic [ref=e45]:
+              - generic [ref=e46]:
+                - generic [ref=e47]: Amount
+                - spinbutton "Amount" [ref=e48]: "12.34"
+              - generic [ref=e49]:
+                - generic [ref=e50]: Notify URL
+                - textbox "Notify URL" [ref=e51]:
+                  - /placeholder: https://host/api/notify
+            - generic [ref=e52]:
+              - generic [ref=e53]:
+                - generic [ref=e54]: App Code
+                - textbox "App Code" [ref=e55]: default
+              - generic [ref=e56]:
+                - generic [ref=e57]: Name
+                - textbox "Name" [ref=e58]: Alipay Official Demo
+            - button "Create Session" [ref=e59] [cursor=pointer]
+        - generic [ref=e60]:
+          - heading "Quick Links" [level=2] [ref=e61]
+          - generic [ref=e62]:
+            - link "Back Dashboard" [ref=e63] [cursor=pointer]:
+              - /url: /mock-console?app_code=default
+            - link "Open Main Admin" [ref=e64] [cursor=pointer]:
+              - /url: http://localhost:3000/admin?token=dev-admin-token-2026&app_code=default
+            - link "Open Main Pay" [ref=e65] [cursor=pointer]:
+              - /url: http://localhost:3000/pay?token=mock-user-token&app_code=default
+      - generic [ref=e66]:
+        - heading "Alipay Official Sessions" [level=2] [ref=e67]
+        - table [ref=e68]:
+          - rowgroup [ref=e69]:
+            - row "Trade Type Amount Status Created Actions" [ref=e70]:
+              - columnheader "Trade" [ref=e71]
+              - columnheader "Type" [ref=e72]
+              - columnheader "Amount" [ref=e73]
+              - columnheader "Status" [ref=e74]
+              - columnheader "Created" [ref=e75]
+              - columnheader "Actions" [ref=e76]
+          - rowgroup [ref=e77]:
+            - row "MOCKPAY000024 manual-alipay-1782232077241 alipay_direct ¥12.34 pending 2026-06-23T16:28:39.050Z Open Success Fail Notify" [ref=e78]:
+              - cell "MOCKPAY000024 manual-alipay-1782232077241" [ref=e79]:
+                - strong [ref=e80]: MOCKPAY000024
+                - generic [ref=e81]: manual-alipay-1782232077241
+              - cell "alipay_direct" [ref=e82]
+              - cell "¥12.34" [ref=e83]
+              - cell "pending" [ref=e84]:
+                - generic [ref=e85]: pending
+              - cell "2026-06-23T16:28:39.050Z" [ref=e86]
+              - cell "Open Success Fail Notify" [ref=e87]:
+                - link "Open" [ref=e88] [cursor=pointer]:
+                  - /url: /mock-pay/MOCKPAY000024
+                - button "Success" [ref=e90] [cursor=pointer]
+                - button "Fail" [ref=e92] [cursor=pointer]
+                - button "Notify" [ref=e94] [cursor=pointer]

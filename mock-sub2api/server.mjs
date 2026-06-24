@@ -12,6 +12,7 @@ const DATA_FILE = path.join(DATA_DIR, 'db.json');
 const MAIN_APP_URL = process.env.MOCK_SUB2API_MAIN_APP_URL || 'http://localhost:3000';
 const DEFAULT_APP_CODE = 'default';
 const DEFAULT_APP_NAME = 'Default App';
+const DEFAULT_STRIPE_NOTIFY_URL = `${MAIN_APP_URL}/api/stripe/webhook`;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -49,6 +50,26 @@ function paymentStatusLabel(status) {
   if (status === -3) return 'cancelled';
   if (status === -4) return 'expired';
   return 'pending';
+}
+
+function providerLabel(provider) {
+  switch (provider) {
+    case 'alipay':
+      return 'Alipay Official';
+    case 'wxpay':
+      return 'WeChat Official';
+    case 'stripe':
+      return 'Stripe';
+    default:
+      return 'EasyPay';
+  }
+}
+
+function inferProviderFromType(type) {
+  if (type === 'alipay_direct') return 'alipay';
+  if (type === 'wxpay_direct') return 'wxpay';
+  if (type === 'stripe') return 'stripe';
+  return 'easypay';
 }
 
 function makeAppCode(name, fallback = 'app') {
@@ -100,6 +121,34 @@ function ensureAppShape(db) {
 
   if (!db.nextIds) db.nextIds = {};
   if (!db.nextIds.app) db.nextIds.app = db.apps.length + 1;
+  if (!db.providerConfigs || typeof db.providerConfigs !== 'object') {
+    db.providerConfigs = {};
+  }
+  for (const app of db.apps) {
+    if (!db.providerConfigs[app.code] || typeof db.providerConfigs[app.code] !== 'object') {
+      db.providerConfigs[app.code] = {};
+    }
+  }
+}
+
+function ensureMockApp(db, appCode, name) {
+  const code = String(appCode || '').trim() || DEFAULT_APP_CODE;
+  if (!db.apps.some((app) => app.code === code)) {
+    const now = nowIso();
+    db.apps.push({
+      code,
+      name: name || code,
+      status: 'active',
+      notes: 'Auto created from mock flow',
+      created_at: now,
+      updated_at: now,
+    });
+  }
+  if (!db.providerConfigs) db.providerConfigs = {};
+  if (!db.providerConfigs[code] || typeof db.providerConfigs[code] !== 'object') {
+    db.providerConfigs[code] = {};
+  }
+  return code;
 }
 
 function ensureDataFile() {
@@ -233,6 +282,7 @@ function ensureDataFile() {
       redeemCodes: [],
       balanceLogs: [],
       paymentSessions: [],
+      providerConfigs: {},
       nextIds: {
         app: 2,
         redeemCode: 1,
@@ -253,6 +303,105 @@ function readDb() {
 
 function writeDb(db) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+}
+
+function normalizePemLikeValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\r\n/g, '\n')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n');
+}
+
+function wrapBase64(b64) {
+  return b64.replace(/(.{64})/g, '$1\n').trim();
+}
+
+function formatPrivateKey(key) {
+  const normalized = normalizePemLikeValue(key);
+  if (!normalized) return '';
+  if (normalized.includes('-----BEGIN')) return normalized;
+  return `-----BEGIN PRIVATE KEY-----\n${wrapBase64(normalized)}\n-----END PRIVATE KEY-----`;
+}
+
+function formatPublicKey(key) {
+  const normalized = normalizePemLikeValue(key);
+  if (!normalized) return '';
+  if (normalized.includes('-----BEGIN')) return normalized;
+  return `-----BEGIN PUBLIC KEY-----\n${wrapBase64(normalized)}\n-----END PUBLIC KEY-----`;
+}
+
+function signRsaSha256Base64(content, privateKey) {
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update(content);
+  return signer.sign(formatPrivateKey(privateKey), 'base64');
+}
+
+function formDecode(value) {
+  return decodeURIComponent(String(value || '').replace(/\+/g, ' '));
+}
+
+function getAppProviderConfig(db, appCode, provider) {
+  return db.providerConfigs?.[appCode]?.[provider] || {};
+}
+
+function findProviderConfigEntry(db, provider, matcher) {
+  for (const app of db.apps || []) {
+    const config = getAppProviderConfig(db, app.code, provider);
+    if (config && matcher(config, app)) {
+      return { appCode: app.code, app, config };
+    }
+  }
+  return null;
+}
+
+function updateProviderConfig(db, appCode, provider, config) {
+  const normalizedCode = ensureMockApp(db, appCode);
+  if (!db.providerConfigs) db.providerConfigs = {};
+  if (!db.providerConfigs[normalizedCode]) db.providerConfigs[normalizedCode] = {};
+  db.providerConfigs[normalizedCode][provider] = {
+    ...(db.providerConfigs[normalizedCode][provider] || {}),
+    ...config,
+    updated_at: nowIso(),
+  };
+}
+
+function sortedEntriesForSign(params, excludedKeys = ['sign']) {
+  return Object.entries(params)
+    .filter(([key, value]) => !excludedKeys.includes(key) && value !== '' && value !== undefined && value !== null)
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
+function generateAlipaySign(params, privateKey) {
+  const signStr = sortedEntriesForSign(params, ['sign', 'sign_type'])
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  return signRsaSha256Base64(signStr, privateKey);
+}
+
+function buildAlipaySignedResponse(responseKey, payload, privateKey) {
+  const responseJson = JSON.stringify(payload);
+  const sign = signRsaSha256Base64(responseJson, privateKey);
+  return `{"${responseKey}":${responseJson},"sign":"${sign}"}`;
+}
+
+function getSessionStatusLabels(status) {
+  if (status === 1) return { alipay: 'TRADE_SUCCESS', wxpay: 'SUCCESS', stripe: 'succeeded' };
+  if (status === -1) return { alipay: 'TRADE_CLOSED', wxpay: 'REFUND', stripe: 'canceled' };
+  if (status === -2) return { alipay: 'TRADE_CLOSED', wxpay: 'PAYERROR', stripe: 'requires_payment_method' };
+  if (status === -3) return { alipay: 'TRADE_CLOSED', wxpay: 'CLOSED', stripe: 'canceled' };
+  if (status === -4) return { alipay: 'TRADE_CLOSED', wxpay: 'CLOSED', stripe: 'canceled' };
+  return { alipay: 'WAIT_BUYER_PAY', wxpay: 'NOTPAY', stripe: 'requires_payment_method' };
+}
+
+function findPaymentSession(db, provider, outTradeNo, tradeNo) {
+  return (
+    db.paymentSessions.find(
+      (item) =>
+        (provider ? (item.provider || inferProviderFromType(item.type)) === provider : true) &&
+        ((tradeNo && item.trade_no === tradeNo) || (outTradeNo && item.out_trade_no === outTradeNo)),
+    ) || null
+  );
 }
 
 function sendJson(res, status, body) {
@@ -349,10 +498,11 @@ function nowIso() {
 
 function createPaymentSession(db, body) {
   const id = db.nextIds.paymentSession++;
-  const tradeNo = `MOCKPAY${String(id).padStart(6, '0')}`;
+  const tradeNo = body.trade_no || `MOCKPAY${String(id).padStart(6, '0')}`;
   const outTradeNo = body.out_trade_no;
   const amount = body.money;
   const type = body.type;
+  const provider = body.provider || inferProviderFromType(type);
   let appCode = body.app_code || DEFAULT_APP_CODE;
   const returnUrl = String(body.return_url || '');
   if (!body.app_code && returnUrl) {
@@ -363,23 +513,128 @@ function createPaymentSession(db, body) {
       /* ignore */
     }
   }
+  appCode = ensureMockApp(db, appCode);
   const session = {
     id,
     trade_no: tradeNo,
     out_trade_no: outTradeNo,
     money: String(amount),
     type,
-    provider: body.provider || 'easypay',
+    provider,
     pid: body.pid || 'mock-pid',
     notify_url: body.notify_url || '',
     return_url: body.return_url || '',
     name: body.name || 'Mock Payment',
     app_code: appCode,
-    status: 0,
-    created_at: nowIso(),
+    status: body.status ?? 0,
+    created_at: body.created_at || nowIso(),
+    updated_at: nowIso(),
   };
+  for (const [key, value] of Object.entries(body || {})) {
+    if (!(key in session) && value !== undefined) {
+      session[key] = value;
+    }
+  }
   db.paymentSessions.push(session);
   return session;
+}
+
+function upsertPaymentSession(db, body) {
+  const provider = body.provider || inferProviderFromType(body.type);
+  const existing = findPaymentSession(db, provider, body.out_trade_no, body.trade_no);
+  if (!existing) {
+    return createPaymentSession(db, body);
+  }
+  for (const [key, value] of Object.entries(body || {})) {
+    if (value !== undefined && value !== null && value !== '') {
+      existing[key] = value;
+    }
+  }
+  existing.provider = provider;
+  existing.type = body.type || existing.type;
+  existing.updated_at = nowIso();
+  return existing;
+}
+
+function getProviderFieldDefs(provider) {
+  if (provider === 'alipay') {
+    return [
+      { key: 'appId', label: 'App ID', placeholder: 'mock-alipay-app' },
+      { key: 'privateKey', label: 'Alipay Private Key', placeholder: '用于回调签名和 query/refund/close 响应签名', multiline: true },
+      { key: 'sellerId', label: 'Seller ID', placeholder: '2088xxxxxxxxxxxx' },
+      { key: 'gatewayBase', label: 'Gateway Base', placeholder: `${APP_URL}/mock-api/alipay/gateway.do`, readonly: true },
+    ];
+  }
+  if (provider === 'wxpay') {
+    return [
+      { key: 'appId', label: 'App ID', placeholder: 'wx1234567890abcdef' },
+      { key: 'mchId', label: 'Mch ID', placeholder: '1900000109' },
+      { key: 'apiV3Key', label: 'API v3 Key', placeholder: '32 字节 AES key' },
+      { key: 'publicKeyId', label: 'Public Key ID', placeholder: 'PUB_KEY_ID_001' },
+      { key: 'privateKey', label: 'Platform Private Key', placeholder: '用于通知签名', multiline: true },
+      { key: 'apiBase', label: 'API Base', placeholder: `${APP_URL}`, readonly: true },
+    ];
+  }
+  return [
+    { key: 'secretKey', label: 'Secret Key', placeholder: 'sk_test_mock_xxx' },
+    { key: 'publishableKey', label: 'Publishable Key', placeholder: 'pk_test_mock_xxx' },
+    { key: 'webhookSecret', label: 'Webhook Secret', placeholder: 'whsec_mock_xxx' },
+    { key: 'apiBase', label: 'API Base', placeholder: `${APP_URL}`, readonly: true },
+  ];
+}
+
+function renderProviderConfigForm(provider, appCode, config) {
+  const fields = getProviderFieldDefs(provider);
+  const rows = fields
+    .map((field) => {
+      const value =
+        field.readonly && !config[field.key]
+          ? field.placeholder || ''
+          : (config[field.key] ?? '');
+      const inputHtml = field.multiline
+        ? `<textarea name="${escapeHtml(field.key)}" rows="5" ${field.readonly ? 'readonly' : ''} placeholder="${escapeHtml(field.placeholder || '')}">${escapeHtml(value)}</textarea>`
+        : `<input name="${escapeHtml(field.key)}" value="${escapeHtml(value)}" ${field.readonly ? 'readonly' : ''} placeholder="${escapeHtml(field.placeholder || '')}" />`;
+      return `<label><span>${escapeHtml(field.label)}</span>${inputHtml}</label>`;
+    })
+    .join('');
+  return `<form method="post" action="${escapeHtml(withAppCode(`/mock-console/providers/${provider}/config`, appCode))}">
+    ${rows}
+    <button class="primary" type="submit">Save Mock Config</button>
+  </form>`;
+}
+
+function parseStripeFormBody(body) {
+  return {
+    amount: Number(body.amount || 0),
+    currency: body.currency || 'cny',
+    description: body.description || 'Mock Stripe Payment',
+    orderId: body['metadata[orderId]'] || '',
+  };
+}
+
+function encryptWxpayResource(resource, apiV3Key, associatedData = 'transaction') {
+  const nonce = crypto.randomBytes(12).toString('hex').slice(0, 12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(apiV3Key), nonce);
+  cipher.setAAD(Buffer.from(associatedData));
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(resource), 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    algorithm: 'AEAD_AES_256_GCM',
+    ciphertext: Buffer.concat([encrypted, authTag]).toString('base64'),
+    nonce,
+    associated_data: associatedData,
+  };
+}
+
+function signWxpayBody(body, privateKey, timestamp, nonce) {
+  const message = `${timestamp}\n${nonce}\n${body}\n`;
+  return signRsaSha256Base64(message, privateKey);
+}
+
+function signStripeEventPayload(payload, webhookSecret, timestamp) {
+  const signedPayload = `${timestamp}.${payload}`;
+  const signature = crypto.createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
+  return `t=${timestamp},v1=${signature}`;
 }
 
 function getActiveAppCode(url, db) {
@@ -421,6 +676,19 @@ function buildMainAdminUrl(appCode) {
   return url.toString();
 }
 
+function buildMainPayUrlForUser(token, appCode, amount, paymentType) {
+  const url = new URL('/pay', MAIN_APP_URL);
+  url.searchParams.set('token', token);
+  if (appCode) url.searchParams.set('app_code', appCode);
+  if (amount) url.searchParams.set('amount', String(amount));
+  if (paymentType) url.searchParams.set('payment_type', paymentType);
+  return url.toString();
+}
+
+function getUserById(db, userId) {
+  return db.users.find((user) => Number(user.id) === Number(userId)) || null;
+}
+
 function generateSign(params, pkey) {
   const queryString = Object.entries(params)
     .filter(([key, value]) => key !== 'sign' && key !== 'sign_type' && value !== '' && value !== undefined && value !== null)
@@ -456,9 +724,166 @@ async function sendEasyPayNotify(session) {
   }
 }
 
+async function sendAlipayNotify(session, db = readDb()) {
+  if (!session.notify_url) return;
+
+  const providerConfig = getAppProviderConfig(db, session.app_code || DEFAULT_APP_CODE, 'alipay');
+  const appId = session.gateway_app_id || providerConfig.appId || 'mock-alipay-app';
+  const sellerId = session.gateway_merchant_id || providerConfig.sellerId || 'mock-seller';
+  const privateKey = providerConfig.privateKey || '';
+
+  const params = {
+    notify_time: nowIso().replace('T', ' ').slice(0, 19),
+    notify_type: 'trade_status_sync',
+    notify_id: `mock_notify_${session.trade_no}`,
+    app_id: appId,
+    charset: 'utf-8',
+    version: '1.0',
+    sign_type: 'RSA2',
+    trade_no: session.trade_no,
+    out_trade_no: session.out_trade_no,
+    trade_status: session.status === 1 ? 'TRADE_SUCCESS' : 'TRADE_CLOSED',
+    total_amount: session.money,
+    subject: session.name,
+    seller_id: sellerId,
+  };
+
+  const url = new URL(session.notify_url);
+  const body = new URLSearchParams({
+    ...params,
+    sign: privateKey ? generateAlipaySign(params, privateKey) : session.gateway_sign || 'mock-alipay-sign',
+  }).toString();
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Alipay notify failed with status ${response.status}`);
+  }
+}
+
+async function sendWxpayNotify(session, db = readDb()) {
+  if (!session.notify_url) return;
+
+  const providerConfig = getAppProviderConfig(db, session.app_code || DEFAULT_APP_CODE, 'wxpay');
+  const apiV3Key = providerConfig.apiV3Key || '0123456789abcdef0123456789abcdef';
+  const publicKeyId = providerConfig.publicKeyId || 'mock-wx-public-key-id';
+  const privateKey = providerConfig.privateKey || '';
+  const labels = getSessionStatusLabels(session.status);
+  const resource = {
+    appid: providerConfig.appId || 'wx1234567890abcdef',
+    mchid: providerConfig.mchId || '1900000109',
+    out_trade_no: session.out_trade_no,
+    transaction_id: session.trade_no,
+    trade_type: session.trade_kind || 'NATIVE',
+    trade_state: labels.wxpay,
+    trade_state_desc: paymentStatusLabel(session.status),
+    bank_type: 'OTHERS',
+    success_time: session.updated_at || nowIso(),
+    payer: {},
+    amount: {
+      total: Math.round(Number(session.money) * 100),
+      payer_total: Math.round(Number(session.money) * 100),
+      currency: 'CNY',
+    },
+  };
+  const encrypted = encryptWxpayResource(resource, apiV3Key, session.gateway_associated_data || 'transaction');
+
+  const body = {
+    id: `mock-wx-${session.trade_no}`,
+    create_time: nowIso(),
+    event_type: 'TRANSACTION.SUCCESS',
+    resource_type: 'encrypt-resource',
+    summary: 'Mock WeChat Pay notify',
+    resource: encrypted,
+  };
+  const bodyText = JSON.stringify(body);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = crypto.randomBytes(8).toString('hex');
+  const signature = privateKey ? signWxpayBody(bodyText, privateKey, timestamp, nonce) : session.gateway_signature || 'mock-wx-signature';
+
+  const response = await fetch(session.notify_url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'wechatpay-serial': publicKeyId,
+      'wechatpay-signature': signature,
+      'wechatpay-timestamp': timestamp,
+      'wechatpay-nonce': nonce,
+    },
+    body: bodyText,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Wxpay notify failed with status ${response.status}`);
+  }
+}
+
+async function sendStripeWebhook(session, db = readDb()) {
+  if (!session.notify_url) return;
+
+  const providerConfig = getAppProviderConfig(db, session.app_code || DEFAULT_APP_CODE, 'stripe');
+  const event = {
+    id: `evt_${session.trade_no}`,
+    object: 'event',
+    type: session.status === 1 ? 'payment_intent.succeeded' : 'payment_intent.payment_failed',
+    data: {
+      object: {
+        id: session.trade_no,
+        object: 'payment_intent',
+        amount: Math.round(Number(session.money) * 100),
+        currency: 'cny',
+        metadata: {
+          orderId: session.out_trade_no,
+        },
+        status: getSessionStatusLabels(session.status).stripe,
+      },
+    },
+  };
+  const body = JSON.stringify(event);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature =
+    providerConfig.webhookSecret ? signStripeEventPayload(body, providerConfig.webhookSecret, timestamp) : session.gateway_signature || 'mock-stripe-signature';
+
+  const response = await fetch(session.notify_url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'stripe-signature': signature,
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Stripe webhook failed with status ${response.status}`);
+  }
+}
+
 async function trySendEasyPayNotify(session) {
   try {
     await sendEasyPayNotify(session);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('mock-sub2api notify failed:', message);
+    return `Notify failed: ${message}`;
+  }
+}
+
+async function dispatchProviderNotify(session) {
+  const db = readDb();
+  if (session.provider === 'alipay') return sendAlipayNotify(session, db);
+  if (session.provider === 'wxpay') return sendWxpayNotify(session, db);
+  if (session.provider === 'stripe') return sendStripeWebhook(session, db);
+  return sendEasyPayNotify(session);
+}
+
+async function tryDispatchProviderNotify(session) {
+  try {
+    await dispatchProviderNotify(session);
     return null;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -477,14 +902,14 @@ async function applyPaymentAction(db, tradeNo, action, options = {}) {
   if (action === 'success') {
     session.status = 1;
     writeDb(db);
-    const notifyError = shouldNotify ? await trySendEasyPayNotify(session) : null;
+    const notifyError = shouldNotify ? await tryDispatchProviderNotify(session) : null;
     return { ok: true, message: notifyError || 'Payment marked as successful' };
   }
 
   if (action === 'fail') {
     session.status = -2;
     writeDb(db);
-    const notifyError = shouldNotify ? await trySendEasyPayNotify(session) : null;
+    const notifyError = shouldNotify ? await tryDispatchProviderNotify(session) : null;
     return { ok: true, message: notifyError || 'Payment marked as failed' };
   }
 
@@ -508,7 +933,7 @@ async function applyPaymentAction(db, tradeNo, action, options = {}) {
 
   if (action === 'notify') {
     writeDb(db);
-    const notifyError = await trySendEasyPayNotify(session);
+    const notifyError = await tryDispatchProviderNotify(session);
     return { ok: true, message: notifyError || 'Notification sent' };
   }
 
@@ -585,6 +1010,9 @@ function renderLayout(title, body, options = {}) {
       <div class="stack">
         <a class="navlink" href="${escapeHtml(withAppCode('/mock-console', appCode))}">控制台总览</a>
         <a class="navlink" href="${escapeHtml(withAppCode('/mock-console#payments', appCode))}">支付会话</a>
+        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console/providers/alipay', appCode))}">支付宝 Mock</a>
+        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console/providers/wxpay', appCode))}">微信 Mock</a>
+        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console/providers/stripe', appCode))}">Stripe Mock</a>
         <a class="navlink" href="${escapeHtml(withAppCode('/mock-console#users', appCode))}">用户与订阅</a>
         <a class="navlink" href="${escapeHtml(withAppCode('/health', appCode))}" target="_blank">健康检查</a>
       </div>
@@ -678,7 +1106,7 @@ function renderPaymentRows(db, appCode) {
       const statusClass = status === 'paid' ? 'good' : status === 'pending' ? 'warn' : 'bad';
       return `<tr>
         <td><strong>${escapeHtml(session.trade_no)}</strong><div class="muted">${escapeHtml(session.out_trade_no)}</div></td>
-        <td>${escapeHtml(session.provider || 'easypay')} / ${escapeHtml(session.type)}<div class="muted">${escapeHtml(session.app_code || DEFAULT_APP_CODE)}</div></td>
+        <td>${escapeHtml(providerLabel(session.provider || 'easypay'))} / ${escapeHtml(session.type)}<div class="muted">${escapeHtml(session.app_code || DEFAULT_APP_CODE)}</div></td>
         <td>¥${escapeHtml(session.money)}</td>
         <td><span class="tag ${statusClass}">${escapeHtml(status)}</span></td>
         <td>${escapeHtml(session.created_at)}<div class="muted">${escapeHtml(session.updated_at || '')}</div></td>
@@ -689,6 +1117,31 @@ function renderPaymentRows(db, appCode) {
           <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/cancel`, appCode))}"><button type="submit">Cancel</button></form>
           <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/expire`, appCode))}"><button type="submit">Expire</button></form>
           <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/refund`, appCode))}"><button type="submit">Refund</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/notify`, appCode))}"><button class="warn" type="submit">Notify</button></form>
+        </td>
+      </tr>`;
+    })
+    .join('');
+}
+
+function renderProviderSessions(db, provider, appCode) {
+  return db.paymentSessions
+    .slice()
+    .reverse()
+    .filter((session) => (session.app_code || DEFAULT_APP_CODE) === appCode && (session.provider || 'easypay') === provider)
+    .map((session) => {
+      const status = paymentStatusLabel(session.status);
+      const statusClass = status === 'paid' ? 'good' : status === 'pending' ? 'warn' : 'bad';
+      return `<tr>
+        <td><strong>${escapeHtml(session.trade_no)}</strong><div class="muted">${escapeHtml(session.out_trade_no)}</div></td>
+        <td>${escapeHtml(session.type)}</td>
+        <td>¥${escapeHtml(session.money)}</td>
+        <td><span class="tag ${statusClass}">${escapeHtml(status)}</span></td>
+        <td>${escapeHtml(session.created_at)}</td>
+        <td class="actions">
+          <a class="button" href="/mock-pay/${encodeURIComponent(session.trade_no)}" target="_blank">Open</a>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/success`, appCode))}"><button class="success" type="submit">Success</button></form>
+          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/fail`, appCode))}"><button class="danger" type="submit">Fail</button></form>
           <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/notify`, appCode))}"><button class="warn" type="submit">Notify</button></form>
         </td>
       </tr>`;
@@ -733,6 +1186,21 @@ function renderConsolePage(db, appCode, notice = '') {
       <div class="metric"><div class="label">Groups</div><div class="value">${db.groups.length}</div><div class="hint">Shared product groups</div></div>
     </section>
     <div class="grid">
+      <section class="panel">
+        <h2>Launch Payment Demo</h2>
+        <form method="post" action="${escapeHtml(withAppCode('/mock-console/launch-payment', appCode))}">
+          <div class="row">
+            <label><span>User</span><select name="user_id">${userOptions}</select></label>
+            <label><span>Payment Type</span><select name="payment_type"><option value="alipay">支付宝 / 易支付</option><option value="wxpay">微信 / 易支付</option><option value="alipay_direct">支付宝官方</option><option value="wxpay_direct">微信官方</option><option value="stripe">Stripe</option></select></label>
+          </div>
+          <div class="row">
+            <label><span>Amount</span><input name="amount" type="number" step="0.01" value="25" /></label>
+            <label><span>Preset</span><select name="preset"><option value="">只打开支付页</option><option value="success">打开后直接模拟成功</option><option value="fail">打开后直接模拟失败</option></select></label>
+          </div>
+          <label><span>说明</span><input name="notes" value="Launch from mock dashboard" /></label>
+          <button class="primary" type="submit">Open Payment Flow</button>
+        </form>
+      </section>
       <section class="panel">
         <h2>Create User</h2>
         <form method="post" action="${escapeHtml(withAppCode('/mock-console/users', appCode))}">
@@ -850,6 +1318,7 @@ function renderMockPayPage(session) {
       <div>金额: ¥${session.money}</div>
       <div>支付方式: ${session.type}</div>
       <div>支付渠道: ${session.provider || 'easypay'}</div>
+      <div>业务应用: ${session.app_code || DEFAULT_APP_CODE}</div>
     </div>
     <div class="actions">
       <a class="primary" href="${confirmUrl}">确认支付成功</a>
@@ -865,6 +1334,73 @@ function renderMockPayPage(session) {
 </html>`;
 }
 
+function renderProviderConsolePage(db, provider, appCode, notice = '') {
+  const currentApp = getAppByCode(db, appCode);
+  const providerTitle = providerLabel(provider);
+  const sessionsTable = renderProviderSessions(db, provider, appCode);
+  const providerConfig = getAppProviderConfig(db, appCode, provider);
+  const typeOptions =
+    provider === 'alipay'
+      ? '<option value="alipay_direct">alipay_direct</option>'
+      : provider === 'wxpay'
+        ? '<option value="wxpay_direct">wxpay_direct</option>'
+        : '<option value="stripe">stripe</option>';
+
+  const body = `
+    ${notice ? `<div class="panel"><strong>${escapeHtml(notice)}</strong></div>` : ''}
+    <section class="panel">
+      <h2>${escapeHtml(providerTitle)} Control</h2>
+      <div class="muted">Current app: <strong>${escapeHtml(currentApp?.name || DEFAULT_APP_NAME)}</strong> · code: <code>${escapeHtml(appCode)}</code></div>
+    </section>
+    <div class="grid">
+      <section class="panel">
+        <h2>Mock Provider Config</h2>
+        <div class="muted" style="margin-bottom:12px;">这些配置会用于 mock 上游网关的签名、通知和查询响应。</div>
+        ${renderProviderConfigForm(provider, appCode, providerConfig)}
+      </section>
+      <section class="panel">
+        <h2>Create Mock Session</h2>
+        <form method="post" action="${escapeHtml(withAppCode(`/mock-console/providers/${provider}/sessions`, appCode))}">
+          <div class="row">
+            <label><span>Order ID</span><input name="out_trade_no" value="manual-${provider}-${Date.now()}" required /></label>
+            <label><span>Type</span><select name="type">${typeOptions}</select></label>
+          </div>
+          <div class="row">
+            <label><span>Amount</span><input name="money" type="number" step="0.01" value="12.34" required /></label>
+            <label><span>Notify URL</span><input name="notify_url" value="" placeholder="https://host/api/notify" /></label>
+          </div>
+          <div class="row">
+            <label><span>App Code</span><input name="app_code" value="${escapeHtml(appCode)}" required /></label>
+            <label><span>Name</span><input name="name" value="${escapeHtml(providerTitle)} Demo" /></label>
+          </div>
+          <button class="primary" type="submit">Create Session</button>
+        </form>
+      </section>
+      <section class="panel">
+        <h2>Quick Links</h2>
+        <div class="actions">
+          <a class="button" href="${escapeHtml(withAppCode('/mock-console', appCode))}">Back Dashboard</a>
+          <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">Open Main Admin</a>
+          <a class="button primary" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">Open Main Pay</a>
+          ${
+            provider === 'alipay'
+              ? `<a class="button" href="${escapeHtml(`${APP_URL}/mock-api/alipay/gateway.do`)}" target="_blank">Gateway Base</a>`
+              : provider === 'wxpay'
+                ? `<a class="button" href="${escapeHtml(`${APP_URL}/v3/pay/transactions/native`)}" target="_blank">API Base</a>`
+                : `<a class="button" href="${escapeHtml(`${APP_URL}/v1/payment_intents`)}" target="_blank">API Base</a>`
+          }
+        </div>
+      </section>
+    </div>
+    <section class="panel">
+      <h2>${escapeHtml(providerTitle)} Sessions</h2>
+      <table><thead><tr><th>Trade</th><th>Type</th><th>Amount</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>${sessionsTable || '<tr><td colspan="6" class="muted">No sessions yet.</td></tr>'}</tbody></table>
+    </section>
+  `;
+
+  return renderLayout(`${providerTitle} Mock`, body, { appCode });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', APP_URL);
   const pathname = url.pathname;
@@ -878,6 +1414,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/mock-console') {
     const notice = url.searchParams.get('notice') || '';
     return sendHtml(res, 200, renderConsolePage(db, appCode, notice));
+  }
+
+  const providerMatch = pathname.match(/^\/mock-console\/providers\/(alipay|wxpay|stripe)$/);
+  if (req.method === 'GET' && providerMatch) {
+    const notice = url.searchParams.get('notice') || '';
+    return sendHtml(res, 200, renderProviderConsolePage(db, providerMatch[1], appCode, notice));
   }
 
   if (req.method === 'GET' && pathname === '/mock-console/api/state') {
@@ -924,6 +1466,79 @@ const server = http.createServer(async (req, res) => {
     db.nextIds.app += 1;
     writeDb(db);
     return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`Created app ${name}`)}`, code));
+  }
+
+  if (req.method === 'POST' && pathname === '/mock-console/launch-payment') {
+    const body = await parseBody(req);
+    const user = getUserById(db, formValue(body, 'user_id', '0'));
+    if (!user) return badRequest(res, 'User not found');
+
+    const amount = Number(formValue(body, 'amount', '25'));
+    const paymentType = formValue(body, 'payment_type', 'alipay');
+    const preset = formValue(body, 'preset', '');
+    const paymentUrl = buildMainPayUrlForUser(
+      user.token,
+      appCode,
+      Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : '25.00',
+      paymentType,
+    );
+
+    if (preset) {
+      const redirectUrl = new URL(paymentUrl);
+      redirectUrl.searchParams.set('mock_preset', preset);
+      return redirect(res, redirectUrl.toString());
+    }
+
+    return redirect(res, paymentUrl);
+  }
+
+  const providerSessionMatch = pathname.match(/^\/mock-console\/providers\/(alipay|wxpay|stripe)\/sessions$/);
+  if (req.method === 'POST' && providerSessionMatch) {
+    const provider = providerSessionMatch[1];
+    const body = await parseBody(req);
+    const session = createPaymentSession(db, {
+      ...body,
+      provider,
+      type:
+        body.type ||
+        (provider === 'alipay' ? 'alipay_direct' : provider === 'wxpay' ? 'wxpay_direct' : 'stripe'),
+      out_trade_no: formValue(body, 'out_trade_no', `manual-${provider}-${Date.now()}`),
+      money: formValue(body, 'money', '12.34'),
+      name: formValue(body, 'name', `${providerLabel(provider)} Demo`),
+      notify_url: formValue(body, 'notify_url', ''),
+      app_code: formValue(body, 'app_code', appCode),
+    });
+    writeDb(db);
+    return redirect(
+      res,
+      withAppCode(
+        `/mock-console/providers/${provider}?notice=${encodeURIComponent(`Created ${providerLabel(provider)} session ${session.trade_no}`)}`,
+        appCode,
+      ),
+    );
+  }
+
+  const providerConfigMatch = pathname.match(/^\/mock-console\/providers\/(alipay|wxpay|stripe)\/config$/);
+  if (req.method === 'POST' && providerConfigMatch) {
+    const provider = providerConfigMatch[1];
+    const body = await parseBody(req);
+    const nextConfig = {};
+    for (const field of getProviderFieldDefs(provider)) {
+      let value = formValue(body, field.key, '');
+      if (field.readonly) {
+        value = field.placeholder || value;
+      }
+      if (value) nextConfig[field.key] = value;
+    }
+    if (provider === 'stripe' && !nextConfig.apiBase) nextConfig.apiBase = APP_URL;
+    if (provider === 'wxpay' && !nextConfig.apiBase) nextConfig.apiBase = APP_URL;
+    if (provider === 'alipay' && !nextConfig.gatewayBase) nextConfig.gatewayBase = `${APP_URL}/mock-api/alipay/gateway.do`;
+    updateProviderConfig(db, appCode, provider, nextConfig);
+    writeDb(db);
+    return redirect(
+      res,
+      withAppCode(`/mock-console/providers/${provider}?notice=${encodeURIComponent(`Saved ${providerLabel(provider)} mock config`)}`, appCode),
+    );
   }
 
   if (req.method === 'POST' && pathname === '/mock-console/subscriptions') {
@@ -985,6 +1600,344 @@ const server = http.createServer(async (req, res) => {
     const result = await applyPaymentAction(db, decodeURIComponent(tradeNo), decodeURIComponent(action));
     if (!result.ok) return sendJson(res, result.status || 400, { code: result.status || 400, message: result.message });
     return redirect(res, `/mock-pay/${encodeURIComponent(decodeURIComponent(tradeNo))}`);
+  }
+
+  if ((req.method === 'GET' || req.method === 'POST') && pathname === '/mock-api/alipay/gateway.do') {
+    const params = req.method === 'GET' ? Object.fromEntries(url.searchParams.entries()) : await parseBody(req);
+    const method = params.method || '';
+    const appId = params.app_id || '';
+    const appEntry = findProviderConfigEntry(db, 'alipay', (config) => config.appId === appId) || {
+      appCode: appCode,
+      config: getAppProviderConfig(db, appCode, 'alipay'),
+    };
+    const providerConfig = appEntry.config || {};
+    const privateKey = providerConfig.privateKey || '';
+    if (!method) return badRequest(res, 'Alipay mock requires method');
+
+    if (method === 'alipay.trade.page.pay' || method === 'alipay.trade.wap.pay') {
+      const bizContent = params.biz_content ? JSON.parse(params.biz_content) : {};
+      const session = upsertPaymentSession(db, {
+        provider: 'alipay',
+        type: 'alipay_direct',
+        out_trade_no: bizContent.out_trade_no,
+        trade_no: bizContent.out_trade_no,
+        money: bizContent.total_amount || '0.00',
+        name: bizContent.subject || 'Alipay Mock Payment',
+        notify_url: params.notify_url || '',
+        return_url: params.return_url || '',
+        app_code: appEntry.appCode || appCode,
+        gateway_app_id: appId,
+        gateway_merchant_id: providerConfig.sellerId || 'mock-seller',
+      });
+      writeDb(db);
+      return redirect(res, `/mock-pay/${encodeURIComponent(session.trade_no)}`);
+    }
+
+    let bizContent = {};
+    try {
+      bizContent = params.biz_content ? JSON.parse(params.biz_content) : {};
+    } catch {
+      return badRequest(res, 'Invalid biz_content JSON');
+    }
+
+    if (method === 'alipay.trade.query') {
+      const session = findPaymentSession(db, 'alipay', bizContent.out_trade_no, bizContent.trade_no);
+      if (!session) {
+        const responseKey = 'alipay_trade_query_response';
+        const body = buildAlipaySignedResponse(
+          responseKey,
+          {
+            code: '40004',
+            msg: 'Business Failed',
+            sub_code: 'ACQ.TRADE_NOT_EXIST',
+            sub_msg: 'Trade not exist',
+          },
+          privateKey,
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+      const labels = getSessionStatusLabels(session.status);
+      const responseKey = 'alipay_trade_query_response';
+      const body = buildAlipaySignedResponse(
+        responseKey,
+        {
+          code: '10000',
+          msg: 'Success',
+          trade_no: session.trade_no,
+          out_trade_no: session.out_trade_no,
+          trade_status: labels.alipay,
+          total_amount: session.money,
+          subject: session.name,
+          buyer_logon_id: 'mock-buyer@example.com',
+          send_pay_date: session.status === 1 ? session.updated_at : undefined,
+        },
+        privateKey,
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(body);
+      return;
+    }
+
+    if (method === 'alipay.trade.refund') {
+      const session = findPaymentSession(db, 'alipay', bizContent.out_trade_no, bizContent.trade_no);
+      if (!session) {
+        const body = buildAlipaySignedResponse(
+          'alipay_trade_refund_response',
+          {
+            code: '40004',
+            msg: 'Business Failed',
+            sub_code: 'ACQ.TRADE_NOT_EXIST',
+            sub_msg: 'Trade not exist',
+          },
+          privateKey,
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+      session.status = -1;
+      session.updated_at = nowIso();
+      writeDb(db);
+      const body = buildAlipaySignedResponse(
+        'alipay_trade_refund_response',
+        {
+          code: '10000',
+          msg: 'Success',
+          trade_no: session.trade_no,
+          out_trade_no: session.out_trade_no,
+          refund_fee: bizContent.refund_amount || session.money,
+          fund_change: 'Y',
+        },
+        privateKey,
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(body);
+      return;
+    }
+
+    if (method === 'alipay.trade.close') {
+      const session = findPaymentSession(db, 'alipay', bizContent.out_trade_no, bizContent.trade_no);
+      if (!session) {
+        const body = buildAlipaySignedResponse(
+          'alipay_trade_close_response',
+          {
+            code: '40004',
+            msg: 'Business Failed',
+            sub_code: 'ACQ.TRADE_NOT_EXIST',
+            sub_msg: 'Trade not exist',
+          },
+          privateKey,
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+      session.status = -3;
+      session.updated_at = nowIso();
+      writeDb(db);
+      const body = buildAlipaySignedResponse(
+        'alipay_trade_close_response',
+        {
+          code: '10000',
+          msg: 'Success',
+          trade_no: session.trade_no,
+          out_trade_no: session.out_trade_no,
+        },
+        privateKey,
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(body);
+      return;
+    }
+
+    return badRequest(res, `Unsupported Alipay mock method: ${method}`);
+  }
+
+  if (req.method === 'POST' && pathname === '/v3/pay/transactions/native') {
+    const body = await parseBody(req);
+    const appEntry = findProviderConfigEntry(db, 'wxpay', (config) => config.appId === body.appid && config.mchId === body.mchid) || {
+      appCode,
+      config: getAppProviderConfig(db, appCode, 'wxpay'),
+    };
+    const session = upsertPaymentSession(db, {
+      provider: 'wxpay',
+      type: 'wxpay_direct',
+      out_trade_no: body.out_trade_no,
+      trade_no: body.out_trade_no,
+      money: Number(body.amount?.total || 0) / 100,
+      name: body.description || 'Wxpay Mock Payment',
+      notify_url: body.notify_url || '',
+      app_code: appEntry.appCode || appCode,
+      trade_kind: 'NATIVE',
+    });
+    writeDb(db);
+    return sendJson(res, 200, {
+      code_url: `${APP_URL}/mock-pay/${session.trade_no}`,
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/v3/pay/transactions/h5') {
+    const body = await parseBody(req);
+    const appEntry = findProviderConfigEntry(db, 'wxpay', (config) => config.appId === body.appid && config.mchId === body.mchid) || {
+      appCode,
+      config: getAppProviderConfig(db, appCode, 'wxpay'),
+    };
+    const session = upsertPaymentSession(db, {
+      provider: 'wxpay',
+      type: 'wxpay_direct',
+      out_trade_no: body.out_trade_no,
+      trade_no: body.out_trade_no,
+      money: Number(body.amount?.total || 0) / 100,
+      name: body.description || 'Wxpay Mock Payment',
+      notify_url: body.notify_url || '',
+      app_code: appEntry.appCode || appCode,
+      trade_kind: 'MWEB',
+    });
+    writeDb(db);
+    return sendJson(res, 200, {
+      h5_url: `${APP_URL}/mock-pay/${session.trade_no}`,
+    });
+  }
+
+  if (req.method === 'GET' && pathname.match(/^\/v3\/pay\/transactions\/out-trade-no\/[^/]+$/)) {
+    const outTradeNo = decodeURIComponent(pathname.split('/').pop());
+    const session = findPaymentSession(db, 'wxpay', outTradeNo, outTradeNo);
+    if (!session) {
+      return sendJson(res, 404, { code: 'ORDER_NOT_EXISTS', message: 'order not found' });
+    }
+    const labels = getSessionStatusLabels(session.status);
+    return sendJson(res, 200, {
+      mchid: url.searchParams.get('mchid') || '',
+      out_trade_no: session.out_trade_no,
+      transaction_id: session.trade_no,
+      trade_state: labels.wxpay,
+      trade_state_desc: paymentStatusLabel(session.status),
+      trade_type: session.trade_kind || 'NATIVE',
+      success_time: session.status === 1 ? session.updated_at : undefined,
+      amount: {
+        total: Math.round(Number(session.money) * 100),
+        payer_total: Math.round(Number(session.money) * 100),
+        currency: 'CNY',
+      },
+    });
+  }
+
+  if (req.method === 'POST' && pathname.match(/^\/v3\/pay\/transactions\/out-trade-no\/[^/]+\/close$/)) {
+    const outTradeNo = decodeURIComponent(pathname.split('/')[5]);
+    const session = findPaymentSession(db, 'wxpay', outTradeNo, outTradeNo);
+    if (!session) {
+      return sendJson(res, 404, { code: 'ORDER_NOT_EXISTS', message: 'order not found' });
+    }
+    session.status = -3;
+    session.updated_at = nowIso();
+    writeDb(db);
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/v3/refund/domestic/refunds') {
+    const body = await parseBody(req);
+    const session = findPaymentSession(db, 'wxpay', body.out_trade_no, body.out_trade_no);
+    if (!session) {
+      return sendJson(res, 404, { code: 'ORDER_NOT_EXISTS', message: 'order not found' });
+    }
+    session.status = -1;
+    session.updated_at = nowIso();
+    writeDb(db);
+    return sendJson(res, 200, {
+      refund_id: `mock-refund-${session.trade_no}`,
+      out_refund_no: body.out_refund_no,
+      out_trade_no: session.out_trade_no,
+      status: 'SUCCESS',
+      success_time: session.updated_at,
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/v1/payment_intents') {
+    const body = await parseBody(req);
+    const stripeBody = parseStripeFormBody(body);
+    if (!stripeBody.orderId) return badRequest(res, 'Stripe mock requires metadata[orderId]');
+    const session = upsertPaymentSession(db, {
+      provider: 'stripe',
+      type: 'stripe',
+      out_trade_no: stripeBody.orderId,
+      trade_no: `pi_${stripeBody.orderId}`,
+      money: (stripeBody.amount / 100).toFixed(2),
+      name: stripeBody.description,
+      notify_url: DEFAULT_STRIPE_NOTIFY_URL,
+      app_code: appCode,
+      stripe_client_secret: `pi_${stripeBody.orderId}_secret_mock`,
+      stripe_currency: stripeBody.currency,
+    });
+    writeDb(db);
+    return sendJson(res, 200, {
+      id: session.trade_no,
+      object: 'payment_intent',
+      amount: stripeBody.amount,
+      currency: stripeBody.currency,
+      client_secret: session.stripe_client_secret,
+      status: getSessionStatusLabels(session.status).stripe,
+      metadata: {
+        orderId: session.out_trade_no,
+      },
+    });
+  }
+
+  if (req.method === 'GET' && pathname.match(/^\/v1\/payment_intents\/[^/]+$/)) {
+    const tradeNo = decodeURIComponent(pathname.split('/').pop());
+    const session = findPaymentSession(db, 'stripe', undefined, tradeNo);
+    if (!session) {
+      return sendJson(res, 404, { error: { message: 'No such payment_intent' } });
+    }
+    return sendJson(res, 200, {
+      id: session.trade_no,
+      object: 'payment_intent',
+      amount: Math.round(Number(session.money) * 100),
+      currency: session.stripe_currency || 'cny',
+      client_secret: session.stripe_client_secret,
+      status: getSessionStatusLabels(session.status).stripe,
+      metadata: {
+        orderId: session.out_trade_no,
+      },
+    });
+  }
+
+  if (req.method === 'POST' && pathname.match(/^\/v1\/payment_intents\/[^/]+\/cancel$/)) {
+    const tradeNo = decodeURIComponent(pathname.split('/')[3]);
+    const session = findPaymentSession(db, 'stripe', undefined, tradeNo);
+    if (!session) {
+      return sendJson(res, 404, { error: { message: 'No such payment_intent' } });
+    }
+    session.status = -3;
+    session.updated_at = nowIso();
+    writeDb(db);
+    return sendJson(res, 200, {
+      id: session.trade_no,
+      object: 'payment_intent',
+      status: 'canceled',
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/v1/refunds') {
+    const body = await parseBody(req);
+    const tradeNo = body.payment_intent;
+    const session = findPaymentSession(db, 'stripe', undefined, tradeNo);
+    if (!session) {
+      return sendJson(res, 404, { error: { message: 'No such payment_intent' } });
+    }
+    session.status = -1;
+    session.updated_at = nowIso();
+    writeDb(db);
+    return sendJson(res, 200, {
+      id: `re_${session.trade_no}`,
+      object: 'refund',
+      status: 'succeeded',
+      payment_intent: session.trade_no,
+      amount: body.amount || Math.round(Number(session.money) * 100),
+    });
   }
 
   if (req.method === 'GET' && pathname === '/api/v1/auth/me') {
@@ -1240,7 +2193,7 @@ const server = http.createServer(async (req, res) => {
     session.updated_at = nowIso();
     writeDb(db);
     try {
-      await sendEasyPayNotify(session);
+      await dispatchProviderNotify(session);
     } catch (error) {
       console.error('mock-sub2api notify failed:', error);
     }

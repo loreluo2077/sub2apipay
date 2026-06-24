@@ -201,6 +201,14 @@ const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
       hint: { en: 'Do not include /mapi.php or /api.php', zh: '不要带 /mapi.php 或 /api.php 后缀' },
     },
     {
+      key: 'gatewayBase',
+      label: { en: 'Gateway Base URL', zh: '网关基础地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://openapi.alipay.com/gateway.do', zh: 'https://openapi.alipay.com/gateway.do' },
+      hint: { en: 'Only set this when routing Alipay requests to a mock or proxy gateway', zh: '只有在接入 mock 或代理网关时才需要填写' },
+    },
+    {
       key: 'notifyUrl',
       label: { en: 'Notify URL', zh: '异步通知地址' },
       sensitive: false,
@@ -232,6 +240,14 @@ const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
       multiline: true,
       placeholder: { en: '-----BEGIN PUBLIC KEY-----', zh: '-----BEGIN PUBLIC KEY-----' },
       hint: { en: 'Use Alipay public key, not your app public key', zh: '这里必须是支付宝公钥，不是应用公钥' },
+    },
+    {
+      key: 'apiBase',
+      label: { en: 'API Base URL', zh: 'API 基础地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://api.mch.weixin.qq.com', zh: 'https://api.mch.weixin.qq.com' },
+      hint: { en: 'Only set this when routing WeChat Pay requests to a mock or proxy gateway', zh: '只有在接入 mock 或代理网关时才需要填写' },
     },
     {
       key: 'notifyUrl',
@@ -309,6 +325,14 @@ const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
       placeholder: { en: 'pk_live_xxx / pk_test_xxx', zh: 'pk_live_xxx / pk_test_xxx' },
     },
     {
+      key: 'apiBase',
+      label: { en: 'API Base URL', zh: 'API 基础地址' },
+      sensitive: false,
+      optional: true,
+      placeholder: { en: 'https://api.stripe.com', zh: 'https://api.stripe.com' },
+      hint: { en: 'Only set this when routing Stripe API calls to a mock gateway', zh: '只有在接入 mock Stripe 网关时才需要填写' },
+    },
+    {
       key: 'webhookSecret',
       label: { en: 'Webhook Secret', zh: 'Webhook 密钥' },
       sensitive: true,
@@ -351,6 +375,45 @@ interface InstanceFormData {
   refundEnabled: boolean;
 }
 
+interface AdminApp {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+}
+
+const MOCK_CONSOLE_BASE_URL = 'http://localhost:3001';
+
+function splitCsv(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function instanceSupportsPaymentType(instance: ProviderInstanceData, paymentType: string): boolean {
+  const supportedTypes = splitCsv(instance.supportedTypes);
+  if (supportedTypes.length > 0) {
+    return supportedTypes.includes(paymentType);
+  }
+  return (PROVIDER_SUPPORTED_TYPES[instance.providerKey] ?? []).includes(paymentType);
+}
+
+function pickInstanceEndpoint(instance: ProviderInstanceData): { key: string; value: string } | null {
+  const keys = ['gatewayBase', 'apiBase', 'notifyUrl', 'returnUrl'];
+  for (const key of keys) {
+    const value = instance.config?.[key]?.trim();
+    if (value) {
+      return { key, value };
+    }
+  }
+  return null;
+}
+
+function isMockValue(value: string): boolean {
+  return /localhost|127\.0\.0\.1|mock-sub2api|3001/i.test(value);
+}
+
 // ── Main Content ──
 
 function PaymentConfigContent() {
@@ -365,6 +428,9 @@ function PaymentConfigContent() {
   const t = getTexts(locale);
 
   const [error, setError] = useState('');
+  const [apps, setApps] = useState<AdminApp[]>([]);
+  const [currentApp, setCurrentApp] = useState<AdminApp | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Basic config
   const [rcPrefix, setRcPrefix] = useState('');
@@ -379,6 +445,7 @@ function PaymentConfigContent() {
   const [rcSaving, setRcSaving] = useState(false);
   const [rcLoadBalanceStrategy, setRcLoadBalanceStrategy] = useState('round-robin');
   const [rcSub2apiKey, setRcSub2apiKey] = useState('');
+  const [rcSub2apiKeyMasked, setRcSub2apiKeyMasked] = useState(false);
   const [rcAutoRefundEnabled, setRcAutoRefundEnabled] = useState(true);
   const [rcEnabledProviders, setRcEnabledProviders] = useState('');
   const [rcEnabledPaymentTypes, setRcEnabledPaymentTypes] = useState('');
@@ -406,14 +473,47 @@ function PaymentConfigContent() {
 
   const enabledProviderKeys = useMemo(
     () =>
-      rcEnabledProviders
-        .split(',')
-        .map((s) => s.trim())
-        .filter((k) => k in PROVIDER_LABELS),
+      splitCsv(rcEnabledProviders).filter((k) => k in PROVIDER_LABELS),
     [rcEnabledProviders],
   );
 
+  const enabledPaymentTypes = useMemo(() => splitCsv(rcEnabledPaymentTypes), [rcEnabledPaymentTypes]);
+  const instancesByProvider = useMemo(
+    () =>
+      enabledProviderKeys.map((providerKey) => ({
+        providerKey,
+        instances: instances.filter((instance) => instance.providerKey === providerKey),
+      })),
+    [enabledProviderKeys, instances],
+  );
+  const totalEnabledInstances = useMemo(() => instances.filter((instance) => instance.enabled).length, [instances]);
+  const mappedPaymentTypes = useMemo(
+    () =>
+      enabledPaymentTypes.map((paymentType) => ({
+        paymentType,
+        instances: instances
+          .filter((instance) => instance.enabled && instanceSupportsPaymentType(instance, paymentType))
+          .sort((a, b) => a.sortOrder - b.sortOrder),
+      })),
+    [enabledPaymentTypes, instances],
+  );
+
   // ── Data fetching ──
+
+  const fetchApps = useCallback(async () => {
+    if (!token) return;
+    try {
+      const query = new URLSearchParams({ token, include_inactive: '1' });
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/apps?${query.toString()}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setApps(data.apps ?? []);
+      setCurrentApp(data.currentApp ?? null);
+    } catch {
+      /* ignore */
+    }
+  }, [token, appCode]);
 
   const fetchConfig = useCallback(async () => {
     if (!token) return;
@@ -439,7 +539,11 @@ function PaymentConfigContent() {
         if (c.key === 'DAILY_RECHARGE_LIMIT') setRcDailyLimit(c.value);
         if (c.key === 'ORDER_TIMEOUT_MINUTES') setRcOrderTimeout(c.value);
         if (c.key === 'LOAD_BALANCE_STRATEGY') setRcLoadBalanceStrategy(c.value || 'round-robin');
-        if (c.key === 'SUB2API_ADMIN_API_KEY') setRcSub2apiKey(/\*{4,}/.test(c.value) ? '' : c.value);
+        if (c.key === 'SUB2API_ADMIN_API_KEY') {
+          const masked = /\*{4,}/.test(c.value);
+          setRcSub2apiKey(masked ? c.value : c.value);
+          setRcSub2apiKeyMasked(masked);
+        }
         if (c.key === 'DEFAULT_DEDUCT_BALANCE') setRcAutoRefundEnabled(c.value === 'true');
       }
     } catch {
@@ -463,9 +567,15 @@ function PaymentConfigContent() {
   }, [token, appCode]);
 
   useEffect(() => {
-    fetchConfig();
-    fetchInstances();
-  }, [fetchConfig, fetchInstances]);
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([fetchApps(), fetchConfig(), fetchInstances()]).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchApps, fetchConfig, fetchInstances]);
 
   const toggleProvider = (key: string) => {
     const current = rcEnabledProviders
@@ -677,7 +787,7 @@ function PaymentConfigContent() {
             },
             {
               key: 'SUB2API_ADMIN_API_KEY',
-              value: rcSub2apiKey,
+              value: rcSub2apiKeyMasked && /\*{4,}/.test(rcSub2apiKey) ? rcSub2apiKey : rcSub2apiKey.trim(),
               group: 'connection',
               label: 'Sub2API Admin API Key',
             },
@@ -717,22 +827,41 @@ function PaymentConfigContent() {
 
   // ── Shared classes ──
   const inputCls = [
-    'w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50',
+    'w-full rounded-xl border px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50',
     isDark
       ? 'border-slate-600 bg-slate-700 text-slate-100 placeholder-slate-400'
       : 'border-slate-300 bg-white text-slate-900 placeholder-slate-400',
   ].join(' ');
-  const labelCls = ['block text-sm font-medium mb-1', isDark ? 'text-slate-300' : 'text-slate-700'].join(' ');
+  const labelCls = ['mb-1 block text-sm font-medium', isDark ? 'text-slate-300' : 'text-slate-700'].join(' ');
   const cardCls = [
-    'rounded-xl border p-5',
+    'rounded-2xl border p-5',
     isDark ? 'border-slate-700 bg-slate-800/70' : 'border-slate-200 bg-white shadow-sm',
   ].join(' ');
   const subCardCls = [
-    'rounded-lg border p-4',
-    isDark ? 'border-slate-600 bg-slate-700/40' : 'border-slate-200 bg-slate-50',
+    'rounded-2xl border p-4',
+    isDark ? 'border-slate-600 bg-slate-700/30' : 'border-slate-200 bg-slate-50/80',
   ].join(' ');
-  const sectionTitleCls = `text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`;
-  const sectionHintCls = `mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`;
+  const sectionTitleCls = `text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`;
+  const sectionHintCls = `mt-1 text-xs leading-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`;
+  const badgeCls = (tone: 'default' | 'good' | 'warn' | 'danger' = 'default') =>
+    [
+      'inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium',
+      tone === 'good'
+        ? isDark
+          ? 'bg-emerald-500/15 text-emerald-300'
+          : 'bg-emerald-50 text-emerald-700'
+        : tone === 'warn'
+          ? isDark
+            ? 'bg-amber-500/15 text-amber-300'
+            : 'bg-amber-50 text-amber-700'
+          : tone === 'danger'
+            ? isDark
+              ? 'bg-red-500/15 text-red-300'
+              : 'bg-red-50 text-red-700'
+            : isDark
+              ? 'bg-slate-700 text-slate-300'
+              : 'bg-slate-100 text-slate-600',
+    ].join(' ');
 
   const Toggle = ({ value, onChange, disabled }: { value: boolean; onChange: () => void; disabled?: boolean }) => (
     <button
@@ -740,7 +869,7 @@ function PaymentConfigContent() {
       onClick={onChange}
       disabled={disabled}
       className={[
-        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0',
+        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
         value ? 'bg-emerald-500' : isDark ? 'bg-slate-600' : 'bg-slate-300',
         disabled ? 'cursor-not-allowed opacity-60' : '',
       ].join(' ')}
@@ -754,7 +883,49 @@ function PaymentConfigContent() {
     </button>
   );
 
-  // ── Render ──
+  const appQuery = new URLSearchParams();
+  if (token) appQuery.set('token', token);
+  appQuery.set('theme', theme);
+  appQuery.set('ui_mode', uiMode);
+  if (appCode) appQuery.set('app_code', appCode);
+  if (locale !== 'zh') appQuery.set('lang', locale);
+
+  const payQuery = new URLSearchParams();
+  payQuery.set('token', 'mock-user-token');
+  payQuery.set('theme', theme);
+  payQuery.set('ui_mode', 'standalone');
+  if (appCode) payQuery.set('app_code', appCode);
+  if (locale !== 'zh') payQuery.set('lang', locale);
+
+  const mainAdminUrl = `/admin?${appQuery.toString()}`;
+  const appsAdminUrl = `/admin/apps?${appQuery.toString()}`;
+  const mainPayUrl = `/pay?${payQuery.toString()}`;
+  const mockConsoleUrl = `${MOCK_CONSOLE_BASE_URL}/mock-console${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`;
+  const appScopedNote =
+    locale === 'en'
+      ? 'Payment instances below are scoped to the current app. Basic rules above are still shared system settings.'
+      : '下方支付实例严格归属于当前 App；上面的充值规则仍然是系统级共享设置。';
+  const activeAppLabel = currentApp?.name || appCode || (locale === 'en' ? 'Unknown App' : '未识别应用');
+
+  if (loading) {
+    return (
+      <PayPageLayout
+        isDark={isDark}
+        isEmbedded={isEmbedded}
+        maxWidth="full"
+        title={t.title}
+        subtitle={t.subtitle}
+        locale={locale}
+      >
+        <div className={cardCls}>
+          <div className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            {locale === 'en' ? 'Loading payment configuration...' : '正在加载支付配置...'}
+          </div>
+        </div>
+      </PayPageLayout>
+    );
+  }
+
   return (
     <PayPageLayout
       isDark={isDark}
@@ -763,11 +934,38 @@ function PaymentConfigContent() {
       title={t.title}
       subtitle={t.subtitle}
       locale={locale}
+      actions={
+        <>
+          <a
+            href={mainPayUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={`inline-flex items-center rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+          >
+            {locale === 'en' ? 'Open Pay Page' : '打开前台支付页'}
+          </a>
+          <a
+            href={mockConsoleUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={`inline-flex items-center rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+          >
+            {locale === 'en' ? 'Open Mock Console' : '打开 Mock 控台'}
+          </a>
+          <button
+            type="button"
+            onClick={saveConfig}
+            disabled={rcSaving}
+            className="inline-flex items-center rounded-xl bg-emerald-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
+          >
+            {rcSaving ? t.savingConfig : t.saveConfig}
+          </button>
+        </>
+      }
     >
-      {/* Error banner */}
       {error && (
         <div
-          className={`mb-4 rounded-lg border p-3 text-sm ${isDark ? 'border-red-800 bg-red-950/50 text-red-400' : 'border-red-200 bg-red-50 text-red-600'}`}
+          className={`mb-4 rounded-xl border p-3 text-sm ${isDark ? 'border-red-800 bg-red-950/50 text-red-400' : 'border-red-200 bg-red-50 text-red-600'}`}
         >
           {error}
           <button onClick={() => setError('')} className="ml-2 opacity-60 hover:opacity-100">
@@ -776,570 +974,718 @@ function PaymentConfigContent() {
         </div>
       )}
 
-      {/* ══ 基础配置 ══ */}
-      <div className={cardCls}>
-        <h2 className={`text-base font-semibold mb-1 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-          {t.basicConfig}
-        </h2>
-        <p className={`text-xs mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.basicConfigHint}</p>
-        <div className="space-y-4">
-          <div className={subCardCls}>
-            <h3 className={sectionTitleCls}>{t.productDisplay}</h3>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div>
-                <label className={labelCls}>{t.productNamePrefix}</label>
-                <input
-                  type="text"
-                  value={rcPrefix}
-                  onChange={(e) => setRcPrefix(e.target.value)}
-                  className={inputCls}
-                  placeholder="Sub2API"
-                />
+      <div className="space-y-4">
+        <section className={cardCls}>
+          <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+            <div className={subCardCls}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={badgeCls('good')}>{locale === 'en' ? 'Current App' : '当前 App'}</span>
+                <span className={badgeCls(currentApp?.status === 'active' ? 'good' : 'warn')}>
+                  {currentApp?.status === 'active'
+                    ? locale === 'en'
+                      ? 'Active'
+                      : '启用中'
+                    : locale === 'en'
+                      ? 'Inactive'
+                      : '未启用'}
+                </span>
               </div>
-              <div>
-                <label className={labelCls}>{t.productNameSuffix}</label>
-                <input
-                  type="text"
-                  value={rcSuffix}
-                  onChange={(e) => setRcSuffix(e.target.value)}
-                  className={inputCls}
-                  placeholder="CNY"
-                />
+              <div className={`mt-3 text-xl font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                {activeAppLabel}
               </div>
-              <div>
-                <label className={labelCls}>{t.preview}</label>
-                <div
-                  className={`rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-700 text-slate-300' : 'border-slate-300 bg-slate-50 text-slate-600'}`}
+              <div className={`mt-1 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                code: <code>{appCode || currentApp?.code || '-'}</code>
+              </div>
+              <p className={sectionHintCls}>{appScopedNote}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a
+                  href={mainAdminUrl}
+                  className={`inline-flex items-center rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-900 text-slate-200 hover:bg-slate-950' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
                 >
-                  {`${rcPrefix.trim() || 'Sub2API'} 100 ${rcSuffix.trim() || 'CNY'}`.trim()}
+                  {locale === 'en' ? 'Refresh Current Admin' : '刷新当前后台'}
+                </a>
+                <a
+                  href={appsAdminUrl}
+                  className={`inline-flex items-center rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-900 text-slate-200 hover:bg-slate-950' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
+                >
+                  {locale === 'en' ? 'Manage Apps' : '管理业务应用'}
+                </a>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className={subCardCls}>
+                <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {locale === 'en' ? 'Enabled Providers' : '启用服务商'}
+                </div>
+                <div className={`mt-2 text-2xl font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                  {enabledProviderKeys.length}
+                </div>
+                <div className={sectionHintCls}>
+                  {enabledProviderKeys.length > 0
+                    ? enabledProviderKeys.map((key) => PROVIDER_LABELS[key]?.[locale] || key).join(' / ')
+                    : locale === 'en'
+                      ? 'No provider type enabled yet.'
+                      : '还没有启用任何服务商类型。'}
+                </div>
+              </div>
+              <div className={subCardCls}>
+                <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {locale === 'en' ? 'Enabled Instances' : '启用实例'}
+                </div>
+                <div className={`mt-2 text-2xl font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                  {totalEnabledInstances}/{instances.length}
+                </div>
+                <div className={sectionHintCls}>
+                  {locale === 'en'
+                    ? `${apps.length} apps in system, ${instances.length} instances under current app.`
+                    : `系统内共 ${apps.length} 个 App，当前 App 下 ${instances.length} 个支付实例。`}
                 </div>
               </div>
             </div>
           </div>
+        </section>
 
-          <div className={subCardCls}>
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h3 className={sectionTitleCls}>{t.behaviorSettings}</h3>
-                <p className={sectionHintCls}>{t.behaviorSettingsHint}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div
-                className={[
-                  'rounded-lg border p-4',
-                  isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white',
-                ].join(' ')}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                      {t.enableBalanceRecharge}
-                    </div>
-                  </div>
-                  <Toggle value={rcBalanceEnabled} onChange={() => setRcBalanceEnabled(!rcBalanceEnabled)} />
-                </div>
-              </div>
-
-              <div
-                className={[
-                  'rounded-lg border p-4',
-                  isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white',
-                ].join(' ')}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                      {t.defaultDeductBalance}
-                    </div>
-                    <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {t.defaultDeductBalanceHint}
-                    </p>
-                  </div>
-                  <Toggle value={rcAutoRefundEnabled} onChange={() => setRcAutoRefundEnabled(!rcAutoRefundEnabled)} />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-lg border p-4" style={{ borderColor: isDark ? '#475569' : '#e2e8f0' }}>
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="flex items-center gap-2 pt-1">
-                  <Toggle
-                    value={rcCancelRateLimitEnabled}
-                    onChange={() => setRcCancelRateLimitEnabled(!rcCancelRateLimitEnabled)}
-                  />
-                  <span className={`text-sm whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                    {t.cancelRateLimit}
-                  </span>
-                </div>
-                {rcCancelRateLimitEnabled && (
-                  <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div>
-                      <label className={labelCls}>{t.cancelRateLimitWindow}</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="999"
-                        value={rcCancelRateLimitWindow}
-                        onChange={(e) => setRcCancelRateLimitWindow(e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>{t.cancelRateLimitUnit}</label>
-                      <select
-                        value={rcCancelRateLimitUnit}
-                        onChange={(e) => setRcCancelRateLimitUnit(e.target.value)}
-                        className={inputCls}
-                      >
-                        <option value="minute">{t.cancelRateLimitUnitMinute}</option>
-                        <option value="hour">{t.cancelRateLimitUnitHour}</option>
-                        <option value="day">{t.cancelRateLimitUnitDay}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelCls}>{t.cancelRateLimitMax}</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="999"
-                        value={rcCancelRateLimitMax}
-                        onChange={(e) => setRcCancelRateLimitMax(e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>{t.cancelRateLimitWindowMode}</label>
-                      <select
-                        value={rcCancelRateLimitWindowMode}
-                        onChange={(e) => setRcCancelRateLimitWindowMode(e.target.value)}
-                        className={inputCls}
-                      >
-                        <option value="rolling">{t.cancelRateLimitWindowModeRolling}</option>
-                        <option value="fixed">{t.cancelRateLimitWindowModeFixed}</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {rcCancelRateLimitEnabled && (
-                <p className={`mt-3 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {t.cancelRateLimitHint(
-                    rcCancelRateLimitWindow,
-                    rcCancelRateLimitUnit,
-                    rcCancelRateLimitMax,
-                    rcCancelRateLimitWindowMode,
-                  )}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className={subCardCls}>
+        <section className={cardCls}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h3 className={sectionTitleCls}>{t.rechargeRules}</h3>
-              <p className={sectionHintCls}>{t.rechargeRulesHint}</p>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <div>
-                <label className={labelCls}>{t.minRechargeAmount}</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={rcMinAmount}
-                  onChange={(e) => setRcMinAmount(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>{t.maxRechargeAmount}</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={rcMaxAmount}
-                  onChange={(e) => setRcMaxAmount(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>{t.dailyRechargeLimit}</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={rcDailyLimit}
-                  onChange={(e) => setRcDailyLimit(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>{t.orderTimeoutMinutes}</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={rcOrderTimeout}
-                  onChange={(e) => setRcOrderTimeout(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>{t.maxPendingOrders}</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="99"
-                  value={rcMaxPendingOrders}
-                  onChange={(e) => setRcMaxPendingOrders(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 max-w-xl">
-              <label className={labelCls}>{t.sub2apiAdminApiKey}</label>
-              <input
-                type="password"
-                value={rcSub2apiKey}
-                onChange={(e) => setRcSub2apiKey(e.target.value)}
-                className={inputCls}
-                placeholder={t.sub2apiAdminApiKeyHint}
-                autoComplete="off"
-              />
-              <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {t.sub2apiAdminApiKeyHint}
+              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                {locale === 'en' ? 'Payment Access Overview' : '支付接入总览'}
+              </h2>
+              <p className={sectionHintCls}>
+                {locale === 'en'
+                  ? 'This helps confirm which payment type will resolve to which enabled provider instance right now.'
+                  : '这里用来快速确认当前每种支付方式最终会落到哪个可用实例。'}
               </p>
             </div>
           </div>
 
-          <div className={subCardCls}>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <h3 className={sectionTitleCls}>{t.providerManagement}</h3>
-                <p className={sectionHintCls}>{t.providerManagementHint}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className={`text-xs whitespace-nowrap ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {t.loadBalanceStrategy}
-                </label>
-                <select
-                  value={rcLoadBalanceStrategy}
-                  onChange={(e) => setRcLoadBalanceStrategy(e.target.value)}
-                  className={[inputCls, 'min-w-[180px] !py-2'].join(' ')}
-                >
-                  <option value="round-robin">{t.strategyRoundRobin}</option>
-                  <option value="least-amount">{t.strategyLeastAmount}</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <label className={labelCls}>{t.enabledProviders}</label>
-              <p className={`mb-3 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.providerTypesHint}</p>
-              <div className="flex flex-wrap gap-2">
-                {ALL_PROVIDER_KEYS.map((key) => {
-                  const isActive = rcEnabledProviders
-                    .split(',')
-                    .map((s) => s.trim())
-                    .includes(key);
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleProvider(key)}
-                      className={[
-                        'rounded-lg border px-4 py-2 text-sm font-medium transition-all',
-                        isActive
-                          ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                          : isDark
-                            ? 'border-slate-500 bg-slate-700 text-slate-300 hover:border-slate-400'
-                            : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50',
-                      ].join(' ')}
-                    >
-                      {PROVIDER_LABELS[key]?.[locale] || key}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-              <div className="mt-5 border-t border-dashed pt-5" style={{ borderColor: isDark ? '#475569' : '#e2e8f0' }}>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className={sectionTitleCls}>{t.providerManagement}</div>
-                    <p className={sectionHintCls}>
-                      {locale === 'en'
-                        ? 'Each app can keep its own payment credentials and callback secrets here.'
-                        : '每个业务应用都可以在这里维护自己独立的支付凭证、回调地址和验签密钥。'}
-                    </p>
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {mappedPaymentTypes.length > 0 ? (
+              mappedPaymentTypes.map(({ paymentType, instances: resolvedInstances }) => (
+                <div key={paymentType} className={subCardCls}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                      {PAYMENT_TYPE_LABELS[paymentType]?.[locale] || paymentType}
+                    </div>
+                    <span className={badgeCls(resolvedInstances.length > 0 ? 'good' : 'warn')}>
+                      {resolvedInstances.length > 0
+                        ? locale === 'en'
+                          ? `${resolvedInstances.length} ready`
+                          : `${resolvedInstances.length} 个可用`
+                        : locale === 'en'
+                          ? 'Not ready'
+                          : '未就绪'}
+                    </span>
                   </div>
-                  <button
-                  type="button"
-                  onClick={openCreateInstance}
-                  className="inline-flex items-center rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-600"
-                >
-                  + {t.addInstance}
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {enabledProviderKeys.length === 0 && (
-                  <div
-                    className={[
-                      'rounded-lg border border-dashed px-4 py-5 text-sm',
-                      isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500',
-                    ].join(' ')}
-                  >
-                    {t.providerTypesHint}
-                  </div>
-                )}
-
-                {enabledProviderKeys.map((pk) => {
-                  const providerInstances = instances.filter((i) => i.providerKey === pk);
-                  return (
-                    <div
-                      key={pk}
-                      className={[
-                        'rounded-lg border p-3',
-                        isDark ? 'border-slate-600 bg-slate-700/30' : 'border-slate-200 bg-slate-50/50',
-                      ].join(' ')}
-                    >
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <h4 className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          {PROVIDER_LABELS[pk]?.[locale] || pk}
-                        </h4>
-                        <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          {providerInstances.length} {locale === 'en' ? 'instance(s)' : '个实例'}
-                        </span>
-                      </div>
-
-                      {providerInstances.length === 0 ? (
-                        <div
-                          className={[
-                            'rounded-lg border border-dashed px-3 py-4 text-sm',
-                            isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500',
-                          ].join(' ')}
-                        >
-                          {t.instancesEmptyHint}
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {providerInstances.map((inst) => {
-                            const instTypes = inst.supportedTypes ? inst.supportedTypes.split(',').filter(Boolean) : [];
-                            return (
-                              <div
-                                key={inst.id}
-                                className={[
-                                  'flex items-start justify-between rounded-lg border px-3 py-2.5',
-                                  isDark ? 'border-slate-500/50 bg-slate-800/60' : 'border-slate-200 bg-white',
-                                ].join(' ')}
-                              >
-                                <div className="min-w-0 space-y-2">
-                                  <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                                  <Toggle value={inst.enabled} onChange={() => toggleInstanceEnabled(inst)} />
-                                  <span
-                                    className={`text-sm font-medium ${inst.enabled ? (isDark ? 'text-slate-100' : 'text-slate-900') : isDark ? 'text-slate-500' : 'text-slate-400'}`}
-                                  >
-                                    {inst.name}
-                                  </span>
-                                  {instTypes.length > 0 ? (
-                                    instTypes.map((type) => (
-                                      <span
-                                        key={type}
-                                        className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}
-                                      >
-                                        {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
-                                      </span>
-                                    ))
-                                  ) : (
-                                    <span
-                                      className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-600 text-slate-400' : 'bg-slate-100 text-slate-500'}`}
-                                    >
-                                      {t.allChannels}
-                                    </span>
-                                  )}
-                                  {inst.todayAmount !== undefined && inst.todayAmount > 0 && (
-                                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                      {t.todayAmount}: ¥{inst.todayAmount}
-                                    </span>
-                                  )}
-                                  <div className="flex items-center gap-1">
-                                    <Toggle value={inst.refundEnabled} onChange={() => toggleInstanceRefundEnabled(inst)} />
-                                    <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                      {t.instanceRefundEnabled}
-                                    </span>
-                                  </div>
-                                </div>
-                                  <div className={`flex flex-wrap gap-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                    {(PROVIDER_CONFIG_FIELDS[inst.providerKey] ?? [])
-                                      .slice(0, 3)
-                                      .map((field) => {
-                                        const value = inst.config?.[field.key];
-                                        if (!value) return null;
-                                        return (
-                                          <span
-                                            key={field.key}
-                                            className={`rounded px-2 py-1 ${isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
-                                          >
-                                            {field.label[locale]}: {value}
-                                          </span>
-                                        );
-                                      })}
-                                  </div>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => openEditInstance(inst)}
-                                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${isDark ? 'text-indigo-400 hover:bg-indigo-500/15' : 'text-indigo-600 hover:bg-indigo-50'}`}
-                                  >
-                                    {locale === 'en' ? 'Edit' : '编辑'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteInstance(inst.id)}
-                                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${isDark ? 'text-red-400 hover:bg-red-500/15' : 'text-red-600 hover:bg-red-50'}`}
-                                  >
-                                    {locale === 'en' ? 'Delete' : '删除'}
-                                  </button>
-                                </div>
+                  <div className="mt-3 space-y-2">
+                    {resolvedInstances.length > 0 ? (
+                      resolvedInstances.map((instance, index) => {
+                        const endpoint = pickInstanceEndpoint(instance);
+                        return (
+                          <div
+                            key={instance.id}
+                            className={`rounded-xl border px-3 py-2 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-slate-200 bg-white'}`}
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={badgeCls(index === 0 ? 'good' : 'default')}>
+                                {index === 0
+                                  ? locale === 'en'
+                                    ? 'Priority'
+                                    : '当前优先'
+                                  : locale === 'en'
+                                    ? `Fallback ${index}`
+                                    : `候补 ${index}`}
+                              </span>
+                              <span className={`text-sm font-medium ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                                {instance.name}
+                              </span>
+                            </div>
+                            <div className={`mt-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                              {PROVIDER_LABELS[instance.providerKey]?.[locale] || instance.providerKey}
+                              {' · '}
+                              {locale === 'en' ? 'sort' : '排序'} {instance.sortOrder}
+                              {' · '}
+                              {instance.refundEnabled
+                                ? locale === 'en'
+                                  ? 'refund on'
+                                  : '支持退款'
+                                : locale === 'en'
+                                  ? 'refund off'
+                                  : '未开启退款'}
+                            </div>
+                            {endpoint && (
+                              <div className="mt-2">
+                                <span className={badgeCls(isMockValue(endpoint.value) ? 'warn' : 'default')}>
+                                  {endpoint.key}: {endpoint.value}
+                                </span>
                               </div>
-                            );
-                          })}
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className={`rounded-xl border border-dashed px-3 py-4 text-sm ${isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500'}`}>
+                        {locale === 'en'
+                          ? 'No enabled instance can serve this payment type.'
+                          : '当前没有可服务此支付方式的已启用实例。'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className={`rounded-xl border border-dashed px-4 py-5 text-sm lg:col-span-3 ${isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500'}`}>
+                {locale === 'en'
+                  ? 'No payment type is enabled yet. Start by enabling provider types below.'
+                  : '当前还没有启用任何支付方式，请先在下方开启服务商类型。'}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className={cardCls}>
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-4">
+              <div className={subCardCls}>
+                <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                  {t.basicConfig}
+                </h2>
+                <p className={sectionHintCls}>{t.basicConfigHint}</p>
+
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <h3 className={sectionTitleCls}>{t.productDisplay}</h3>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className={labelCls}>{t.productNamePrefix}</label>
+                        <input type="text" value={rcPrefix} onChange={(e) => setRcPrefix(e.target.value)} className={inputCls} placeholder="Sub2API" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>{t.productNameSuffix}</label>
+                        <input type="text" value={rcSuffix} onChange={(e) => setRcSuffix(e.target.value)} className={inputCls} placeholder="CNY" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>{t.preview}</label>
+                        <div className={`rounded-xl border px-3 py-2.5 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-300' : 'border-slate-300 bg-white text-slate-600'}`}>
+                          {`${rcPrefix.trim() || 'Sub2API'} 100 ${rcSuffix.trim() || 'CNY'}`.trim()}
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className={sectionTitleCls}>{t.behaviorSettings}</h3>
+                        <p className={sectionHintCls}>{t.behaviorSettingsHint}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                      <div className={`rounded-xl border p-4 ${isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{t.enableBalanceRecharge}</div>
+                          <Toggle value={rcBalanceEnabled} onChange={() => setRcBalanceEnabled(!rcBalanceEnabled)} />
+                        </div>
+                      </div>
+                      <div className={`rounded-xl border p-4 ${isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{t.defaultDeductBalance}</div>
+                            <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.defaultDeductBalanceHint}</p>
+                          </div>
+                          <Toggle value={rcAutoRefundEnabled} onChange={() => setRcAutoRefundEnabled(!rcAutoRefundEnabled)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`mt-3 rounded-xl border p-4 ${isDark ? 'border-slate-600' : 'border-slate-200'}`}>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <div className="flex items-center gap-2 pt-1">
+                          <Toggle value={rcCancelRateLimitEnabled} onChange={() => setRcCancelRateLimitEnabled(!rcCancelRateLimitEnabled)} />
+                          <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t.cancelRateLimit}</span>
+                        </div>
+                        {rcCancelRateLimitEnabled && (
+                          <div className="grid flex-1 gap-3 sm:grid-cols-4">
+                            <div>
+                              <label className={labelCls}>{t.cancelRateLimitWindow}</label>
+                              <input type="number" min="1" max="999" value={rcCancelRateLimitWindow} onChange={(e) => setRcCancelRateLimitWindow(e.target.value)} className={inputCls} />
+                            </div>
+                            <div>
+                              <label className={labelCls}>{t.cancelRateLimitUnit}</label>
+                              <select value={rcCancelRateLimitUnit} onChange={(e) => setRcCancelRateLimitUnit(e.target.value)} className={inputCls}>
+                                <option value="minute">{t.cancelRateLimitUnitMinute}</option>
+                                <option value="hour">{t.cancelRateLimitUnitHour}</option>
+                                <option value="day">{t.cancelRateLimitUnitDay}</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={labelCls}>{t.cancelRateLimitMax}</label>
+                              <input type="number" min="1" max="999" value={rcCancelRateLimitMax} onChange={(e) => setRcCancelRateLimitMax(e.target.value)} className={inputCls} />
+                            </div>
+                            <div>
+                              <label className={labelCls}>{t.cancelRateLimitWindowMode}</label>
+                              <select value={rcCancelRateLimitWindowMode} onChange={(e) => setRcCancelRateLimitWindowMode(e.target.value)} className={inputCls}>
+                                <option value="rolling">{t.cancelRateLimitWindowModeRolling}</option>
+                                <option value="fixed">{t.cancelRateLimitWindowModeFixed}</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {rcCancelRateLimitEnabled && (
+                        <p className={`mt-3 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                          {t.cancelRateLimitHint(rcCancelRateLimitWindow, rcCancelRateLimitUnit, rcCancelRateLimitMax, rcCancelRateLimitWindowMode)}
+                        </p>
                       )}
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
+              </div>
+
+              <div className={subCardCls}>
+                <h3 className={sectionTitleCls}>{t.rechargeRules}</h3>
+                <p className={sectionHintCls}>
+                  {locale === 'en'
+                    ? 'These are shared recharge constraints. They affect all apps until we finish app-level split later.'
+                    : '这些仍是共享的充值约束，会影响所有 App；后续如果做 App 级隔离，再继续拆分。'}
+                </p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <div>
+                    <label className={labelCls}>{t.minRechargeAmount}</label>
+                    <input type="number" min="0" value={rcMinAmount} onChange={(e) => setRcMinAmount(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>{t.maxRechargeAmount}</label>
+                    <input type="number" min="0" value={rcMaxAmount} onChange={(e) => setRcMaxAmount(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>{t.dailyRechargeLimit}</label>
+                    <input type="number" min="0" value={rcDailyLimit} onChange={(e) => setRcDailyLimit(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>{t.orderTimeoutMinutes}</label>
+                    <input type="number" min="1" value={rcOrderTimeout} onChange={(e) => setRcOrderTimeout(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>{t.maxPendingOrders}</label>
+                    <input type="number" min="1" max="99" value={rcMaxPendingOrders} onChange={(e) => setRcMaxPendingOrders(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>{t.loadBalanceStrategy}</label>
+                    <select value={rcLoadBalanceStrategy} onChange={(e) => setRcLoadBalanceStrategy(e.target.value)} className={inputCls}>
+                      <option value="round-robin">{t.strategyRoundRobin}</option>
+                      <option value="least-amount">{t.strategyLeastAmount}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className={labelCls}>{t.sub2apiAdminApiKey}</label>
+                  <input
+                    type="password"
+                    value={rcSub2apiKey}
+                    onChange={(e) => {
+                      setRcSub2apiKey(e.target.value);
+                      setRcSub2apiKeyMasked(false);
+                    }}
+                    className={inputCls}
+                    placeholder={t.sub2apiAdminApiKeyHint}
+                    autoComplete="off"
+                  />
+                  <p className={sectionHintCls}>
+                    {locale === 'en'
+                      ? 'Stored in database only. Leaving the masked value unchanged keeps the existing secret.'
+                      : '仅保存到数据库。保持当前掩码不变时，会继续沿用已保存的密钥。'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className={subCardCls}>
+                <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                  {locale === 'en' ? 'Provider Types' : '支付方式入口'}
+                </h2>
+                <p className={sectionHintCls}>
+                  {locale === 'en'
+                    ? 'This controls which provider families the system can select from. The concrete credentials are maintained in the instance list below.'
+                    : '这里控制系统允许使用哪些服务商族；真正的凭证和回调信息在下方实例列表里维护。'}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {ALL_PROVIDER_KEYS.map((key) => {
+                    const isActive = enabledProviderKeys.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => toggleProvider(key)}
+                        className={[
+                          'rounded-xl border px-4 py-2 text-sm font-medium transition-all',
+                          isActive
+                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                            : isDark
+                              ? 'border-slate-500 bg-slate-800 text-slate-300 hover:border-slate-400'
+                              : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50',
+                        ].join(' ')}
+                      >
+                        {PROVIDER_LABELS[key]?.[locale] || key}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {enabledPaymentTypes.length > 0 ? (
+                    enabledPaymentTypes.map((type) => (
+                      <span key={type} className={badgeCls('good')}>
+                        {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
+                      </span>
+                    ))
+                  ) : (
+                    <span className={badgeCls('warn')}>
+                      {locale === 'en' ? 'No payment type exposed yet' : '当前还没有对外开放支付方式'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className={subCardCls}>
+                <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                  {locale === 'en' ? 'Testing Shortcuts' : '联调快捷入口'}
+                </h2>
+                <p className={sectionHintCls}>
+                  {locale === 'en'
+                    ? 'Use these links to verify the full payment flow without leaving the current app context.'
+                    : '这些入口会自动带上当前 App 上下文，方便你自己重复跑完整支付链路。'}
+                </p>
+                <div className="mt-4 grid gap-2">
+                  <a href={mockConsoleUrl} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    {locale === 'en' ? 'Mock Dashboard' : 'Mock 总控台'}
+                  </a>
+                  <a href={`${MOCK_CONSOLE_BASE_URL}/mock-console/providers/alipay${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    Alipay Mock
+                  </a>
+                  <a href={`${MOCK_CONSOLE_BASE_URL}/mock-console/providers/wxpay${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    WeChat Mock
+                  </a>
+                  <a href={`${MOCK_CONSOLE_BASE_URL}/mock-console/providers/stripe${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    Stripe Mock
+                  </a>
+                  <a href={mainPayUrl} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    {locale === 'en' ? 'Main Pay Page (mock user)' : '主前台支付页（mock 用户）'}
+                  </a>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Save button */}
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={saveConfig}
-            disabled={rcSaving}
-            className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
-          >
-            {rcSaving ? t.savingConfig : t.saveConfig}
-          </button>
-        </div>
+        <section className={cardCls}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                {locale === 'en' ? 'App Payment Instances' : '当前 App 的支付实例'}
+              </h2>
+              <p className={sectionHintCls}>
+                {locale === 'en'
+                  ? 'Create one or more concrete provider instances per app. This is where production-like credentials live.'
+                  : '为当前 App 维护具体的支付实例。这里保存的是更接近生产的真实接入配置。'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openCreateInstance}
+              className="inline-flex items-center rounded-xl bg-emerald-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-600"
+            >
+              + {t.addInstance}
+            </button>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            {instancesByProvider.length === 0 && (
+              <div className={`rounded-xl border border-dashed px-4 py-6 text-sm ${isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500'}`}>
+                {locale === 'en'
+                  ? 'No provider type enabled. Enable a provider family first, then create instances.'
+                  : '还没有启用任何服务商类型。请先开启服务商，再创建实例。'}
+              </div>
+            )}
+
+            {instancesByProvider.map(({ providerKey, instances: providerInstances }) => (
+              <div key={providerKey} className={subCardCls}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                        {PROVIDER_LABELS[providerKey]?.[locale] || providerKey}
+                      </h3>
+                      <span className={badgeCls(providerInstances.length > 0 ? 'good' : 'warn')}>
+                        {providerInstances.length} {locale === 'en' ? 'instance(s)' : '个实例'}
+                      </span>
+                    </div>
+                    <p className={sectionHintCls}>
+                      {(PROVIDER_SUPPORTED_TYPES[providerKey] ?? [])
+                        .map((type) => PAYMENT_TYPE_LABELS[type]?.[locale] || type)
+                        .join(' / ') || t.instancesEmptyHint}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={`${MOCK_CONSOLE_BASE_URL}/mock-console${providerKey === 'easypay' ? '' : `/providers/${providerKey}`}${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
+                    >
+                      {providerKey === 'easypay'
+                        ? locale === 'en'
+                          ? 'Open Mock Dashboard'
+                          : '打开 Mock 总控台'
+                        : locale === 'en'
+                          ? 'Open Provider Mock'
+                          : '打开渠道 Mock'}
+                    </a>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {providerInstances.length === 0 ? (
+                    <div className={`rounded-xl border border-dashed px-4 py-5 text-sm ${isDark ? 'border-slate-600 text-slate-400' : 'border-slate-300 text-slate-500'}`}>
+                      {t.instancesEmptyHint}
+                    </div>
+                  ) : (
+                    providerInstances.map((inst) => {
+                      const instTypes = splitCsv(inst.supportedTypes);
+                      const endpoint = pickInstanceEndpoint(inst);
+                      const previewFields = (PROVIDER_CONFIG_FIELDS[inst.providerKey] ?? []).slice(0, 4);
+                      return (
+                        <div
+                          key={inst.id}
+                          className={`rounded-2xl border p-4 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-slate-200 bg-white'}`}
+                        >
+                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Toggle value={inst.enabled} onChange={() => toggleInstanceEnabled(inst)} />
+                                <span className={`text-base font-semibold ${inst.enabled ? (isDark ? 'text-slate-100' : 'text-slate-900') : isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                                  {inst.name}
+                                </span>
+                                <span className={badgeCls(inst.enabled ? 'good' : 'warn')}>
+                                  {inst.enabled ? (locale === 'en' ? 'Enabled' : '已启用') : locale === 'en' ? 'Disabled' : '已停用'}
+                                </span>
+                                <span className={badgeCls(inst.refundEnabled ? 'good' : 'default')}>
+                                  {inst.refundEnabled ? t.instanceRefundEnabled : locale === 'en' ? 'Refund Off' : '未开启退款'}
+                                </span>
+                                <span className={badgeCls('default')}>
+                                  {locale === 'en' ? 'sort' : '排序'} {inst.sortOrder}
+                                </span>
+                                {inst.todayAmount !== undefined && inst.todayAmount > 0 && (
+                                  <span className={badgeCls('warn')}>
+                                    {t.todayAmount}: ¥{inst.todayAmount}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className={`mt-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                providerKey: <code>{inst.providerKey}</code>
+                                {' · '}
+                                id: <code>{inst.id}</code>
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {instTypes.length > 0 ? (
+                                  instTypes.map((type) => (
+                                    <span key={type} className={badgeCls('good')}>
+                                      {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className={badgeCls('default')}>{t.allChannels}</span>
+                                )}
+                                {endpoint && (
+                                  <span className={badgeCls(isMockValue(endpoint.value) ? 'warn' : 'default')}>
+                                    {endpoint.key}: {endpoint.value}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                                {previewFields.map((field) => {
+                                  const value = inst.config?.[field.key];
+                                  if (!value) return null;
+                                  return (
+                                    <div key={field.key} className={`rounded-xl px-3 py-2 text-xs ${isDark ? 'bg-slate-700/70 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>
+                                      <div className="font-medium">{field.label[locale]}</div>
+                                      <div className="mt-1 break-all">{value}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="flex shrink-0 flex-wrap gap-2 xl:w-[220px] xl:flex-col">
+                              <button
+                                type="button"
+                                onClick={() => openEditInstance(inst)}
+                                className={`rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                              >
+                                {locale === 'en' ? 'Edit Instance' : '编辑实例'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleInstanceRefundEnabled(inst)}
+                                className={`rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                              >
+                                {inst.refundEnabled
+                                  ? locale === 'en'
+                                    ? 'Turn Refund Off'
+                                    : '关闭退款'
+                                  : locale === 'en'
+                                    ? 'Turn Refund On'
+                                    : '开启退款'}
+                              </button>
+                              <a
+                                href={`${MOCK_CONSOLE_BASE_URL}/mock-console${inst.providerKey === 'easypay' ? '' : `/providers/${inst.providerKey}`}${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`rounded-xl px-3 py-2 text-center text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                              >
+                                {locale === 'en' ? 'Open Mock Control' : '打开 Mock 控制台'}
+                              </a>
+                              <a
+                                href={mainPayUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`rounded-xl px-3 py-2 text-center text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                              >
+                                {locale === 'en' ? 'Open Frontend Flow' : '打开前台流程'}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteInstance(inst.id)}
+                                className={`rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-red-500/15 text-red-300 hover:bg-red-500/25' : 'bg-red-50 text-red-700 hover:bg-red-100'}`}
+                              >
+                                {locale === 'en' ? 'Delete' : '删除'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
 
-      {/* ══ Instance Modal ══ */}
       {instanceModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div
             className={[
-              'relative w-full max-w-lg overflow-y-auto rounded-2xl border p-6 shadow-2xl',
+              'relative w-full max-w-5xl overflow-y-auto rounded-3xl border p-6 shadow-2xl',
               isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white',
             ].join(' ')}
-            style={{ maxHeight: '90vh' }}
+            style={{ maxHeight: '92vh' }}
           >
-            <h2 className={`mb-5 text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-              {editingInstance ? t.editInstance : t.addInstance}
-            </h2>
+            <div className="flex flex-col gap-2 border-b pb-4" style={{ borderColor: isDark ? '#334155' : '#e2e8f0' }}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={badgeCls('good')}>{editingInstance ? t.editInstance : t.addInstance}</span>
+                <span className={badgeCls('default')}>
+                  {locale === 'en' ? 'Current App' : '当前 App'}: {activeAppLabel}
+                </span>
+              </div>
+              <h2 className={`text-xl font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                {editingInstance ? t.editInstance : t.addInstance}
+              </h2>
+              <p className={sectionHintCls}>
+                {locale === 'en'
+                  ? 'Use production-like values here. Sensitive fields keep the masked value unless you overwrite them.'
+                  : '这里尽量填写接近生产的真实配置。敏感字段如果保持掩码不变，就会继续沿用原值。'}
+              </p>
+            </div>
 
             {error && (
-              <div
-                className={`mb-4 rounded-lg border p-3 text-sm ${isDark ? 'border-red-800 bg-red-950/50 text-red-400' : 'border-red-200 bg-red-50 text-red-600'}`}
-              >
+              <div className={`mt-4 rounded-xl border p-3 text-sm ${isDark ? 'border-red-800 bg-red-950/50 text-red-400' : 'border-red-200 bg-red-50 text-red-600'}`}>
                 {error}
               </div>
             )}
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>
-                    {t.instanceProvider}
-                    <span className="text-red-500 ml-0.5">*</span>
-                  </label>
-                  <select
-                    value={instanceForm.providerKey}
-                    onChange={(e) =>
-                      setInstanceForm({
-                        ...instanceForm,
-                        providerKey: e.target.value,
-                        config: {},
-                        supportedTypes: PROVIDER_SUPPORTED_TYPES[e.target.value] || [],
-                        limits: {},
-                      })
-                    }
-                    className={inputCls}
-                    disabled={!!editingInstance}
-                  >
-                    {enabledProviderKeys.map((key) => (
-                      <option key={key} value={key}>
-                        {PROVIDER_LABELS[key]?.[locale] || key}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>
-                    {t.instanceName}
-                    <span className="text-red-500 ml-0.5">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={instanceForm.name}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, name: e.target.value })}
-                    className={inputCls}
-                    placeholder={PROVIDER_LABELS[instanceForm.providerKey]?.[locale] + ' A'}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>{t.instanceSortOrder}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={instanceForm.sortOrder}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, sortOrder: parseInt(e.target.value, 10) || 0 })}
-                    className={inputCls}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="flex items-end pb-1">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Toggle
-                        value={instanceForm.enabled}
-                        onChange={() => setInstanceForm({ ...instanceForm, enabled: !instanceForm.enabled })}
-                      />
-                      <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {t.instanceEnabled}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Toggle
-                        value={instanceForm.refundEnabled}
-                        onChange={() =>
-                          setInstanceForm({ ...instanceForm, refundEnabled: !instanceForm.refundEnabled })
+            <div className="mt-5 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="space-y-4">
+                <div className={subCardCls}>
+                  <h3 className={sectionTitleCls}>{locale === 'en' ? 'Basic Info' : '基本信息'}</h3>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className={labelCls}>
+                        {t.instanceProvider}
+                        <span className="ml-0.5 text-red-500">*</span>
+                      </label>
+                      <select
+                        value={instanceForm.providerKey}
+                        onChange={(e) =>
+                          setInstanceForm({
+                            ...instanceForm,
+                            providerKey: e.target.value,
+                            config: {},
+                            supportedTypes: PROVIDER_SUPPORTED_TYPES[e.target.value] || [],
+                            limits: {},
+                          })
                         }
+                        className={inputCls}
+                        disabled={!!editingInstance}
+                      >
+                        {enabledProviderKeys.map((key) => (
+                          <option key={key} value={key}>
+                            {PROVIDER_LABELS[key]?.[locale] || key}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>
+                        {t.instanceName}
+                        <span className="ml-0.5 text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={instanceForm.name}
+                        onChange={(e) => setInstanceForm({ ...instanceForm, name: e.target.value })}
+                        className={inputCls}
+                        placeholder={PROVIDER_LABELS[instanceForm.providerKey]?.[locale] + ' A'}
+                        required
                       />
-                      <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {t.instanceRefundEnabled}
-                      </span>
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t.instanceSortOrder}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={instanceForm.sortOrder}
+                        onChange={(e) => setInstanceForm({ ...instanceForm, sortOrder: parseInt(e.target.value, 10) || 0 })}
+                        className={inputCls}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <div className="flex flex-wrap items-center gap-4 pb-1">
+                        <div className="flex items-center gap-2">
+                          <Toggle value={instanceForm.enabled} onChange={() => setInstanceForm({ ...instanceForm, enabled: !instanceForm.enabled })} />
+                          <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t.instanceEnabled}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Toggle value={instanceForm.refundEnabled} onChange={() => setInstanceForm({ ...instanceForm, refundEnabled: !instanceForm.refundEnabled })} />
+                          <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t.instanceRefundEnabled}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {(PROVIDER_SUPPORTED_TYPES[instanceForm.providerKey] || []).length > 1 && (
-                <div>
-                  <label className={labelCls}>{t.supportedChannels}</label>
-                  <p className={`text-xs mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {t.supportedChannelsHint}
-                  </p>
-                  <div className="space-y-2">
+                <div className={subCardCls}>
+                  <h3 className={sectionTitleCls}>{t.supportedChannels}</h3>
+                  <p className={sectionHintCls}>{t.supportedChannelsHint}</p>
+                  <div className="mt-3 space-y-3">
                     {(PROVIDER_SUPPORTED_TYPES[instanceForm.providerKey] || []).map((type) => {
                       const isActive = instanceForm.supportedTypes.includes(type);
                       const cidKey = type === 'alipay' ? 'cidAlipay' : type === 'wxpay' ? 'cidWxpay' : '';
@@ -1352,66 +1698,160 @@ function PaymentConfigContent() {
                             ? 'WeChat Channel ID'
                             : '微信渠道 ID';
                       return (
-                        <div key={type} className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setInstanceForm((p) => ({
-                                ...p,
-                                supportedTypes: isActive
-                                  ? p.supportedTypes.filter((t) => t !== type)
-                                  : [...p.supportedTypes, type],
-                              }))
-                            }
-                            className={[
-                              'rounded-md border px-3 py-1.5 text-xs font-medium transition-colors shrink-0',
-                              isActive
-                                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-600'
-                                : isDark
-                                  ? 'border-slate-500 text-slate-400 hover:border-slate-400'
-                                  : 'border-slate-300 text-slate-500 hover:border-slate-400',
-                            ].join(' ')}
-                          >
-                            {isActive ? '✓ ' : ''}
-                            {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
-                          </button>
-                          {isActive && cidKey && instanceForm.providerKey === 'easypay' && (
-                            <input
-                              type="text"
-                              value={instanceForm.config[cidKey] ?? ''}
-                              onChange={(e) =>
-                                setInstanceForm({
-                                  ...instanceForm,
-                                  config: { ...instanceForm.config, [cidKey]: e.target.value },
-                                })
+                        <div key={type} className={`rounded-xl border p-3 ${isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white'}`}>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setInstanceForm((prev) => ({
+                                  ...prev,
+                                  supportedTypes: isActive
+                                    ? prev.supportedTypes.filter((item) => item !== type)
+                                    : [...prev.supportedTypes, type],
+                                }))
                               }
-                              className={[inputCls, 'flex-1'].join(' ')}
-                              placeholder={cidLabel}
-                            />
-                          )}
+                              className={[
+                                'rounded-xl border px-3 py-2 text-xs font-medium transition-colors',
+                                isActive
+                                  ? 'border-emerald-500 bg-emerald-500/15 text-emerald-600'
+                                  : isDark
+                                    ? 'border-slate-500 text-slate-400 hover:border-slate-400'
+                                    : 'border-slate-300 text-slate-500 hover:border-slate-400',
+                              ].join(' ')}
+                            >
+                              {isActive ? '✓ ' : ''}
+                              {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
+                            </button>
+                            {isActive && cidKey && instanceForm.providerKey === 'easypay' && (
+                              <input
+                                type="text"
+                                value={instanceForm.config[cidKey] ?? ''}
+                                onChange={(e) =>
+                                  setInstanceForm({
+                                    ...instanceForm,
+                                    config: { ...instanceForm.config, [cidKey]: e.target.value },
+                                  })
+                                }
+                                className={[inputCls, 'flex-1'].join(' ')}
+                                placeholder={cidLabel}
+                              />
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-              )}
 
-              <div>
-                <label className={[labelCls, 'mb-2'].join(' ')}>
-                  {t.instanceConfig}
-                  <span className="text-red-500 ml-0.5">*</span>
-                </label>
-                <div className="space-y-2.5">
+                <div className={subCardCls}>
+                  <button
+                    type="button"
+                    onClick={() => setLimitsOpen(!limitsOpen)}
+                    className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-slate-200 hover:text-slate-100' : 'text-slate-700 hover:text-slate-900'}`}
+                  >
+                    <span className="text-[10px]" style={{ transform: limitsOpen ? 'rotate(90deg)' : 'none' }}>
+                      ▶
+                    </span>
+                    {locale === 'en' ? 'Per-Channel Limits' : '分渠道限额'}
+                    {Object.values(instanceForm.limits).some((item) => item.dailyLimit || item.singleMin || item.singleMax) && (
+                      <span className={badgeCls('warn')}>{locale === 'en' ? 'configured' : '已配置'}</span>
+                    )}
+                  </button>
+
+                  {limitsOpen && (
+                    <div className="mt-3 space-y-3">
+                      <p className={sectionHintCls}>
+                        {locale === 'en'
+                          ? 'Optional limits for each payment type under this provider instance.'
+                          : '可选配置，按支付方式限制单笔和每日额度。'}
+                      </p>
+                      {(PROVIDER_SUPPORTED_TYPES[instanceForm.providerKey] || []).map((type) => (
+                        <div key={type} className={`rounded-xl border p-3 ${isDark ? 'border-slate-600 bg-slate-800/40' : 'border-slate-200 bg-white'}`}>
+                          <div className={`mb-2 text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                            {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <div>
+                              <label className={`mb-1 block text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                {locale === 'en' ? 'Single Min' : '单笔最小'}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={instanceForm.limits[type]?.singleMin ?? ''}
+                                onChange={(e) => {
+                                  const value = e.target.value ? Number(e.target.value) : undefined;
+                                  setInstanceForm((prev) => ({
+                                    ...prev,
+                                    limits: { ...prev.limits, [type]: { ...prev.limits[type], singleMin: value } },
+                                  }));
+                                }}
+                                className={inputCls}
+                                placeholder={locale === 'en' ? 'Unlimited' : '不限'}
+                              />
+                            </div>
+                            <div>
+                              <label className={`mb-1 block text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                {locale === 'en' ? 'Single Max' : '单笔最大'}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={instanceForm.limits[type]?.singleMax ?? ''}
+                                onChange={(e) => {
+                                  const value = e.target.value ? Number(e.target.value) : undefined;
+                                  setInstanceForm((prev) => ({
+                                    ...prev,
+                                    limits: { ...prev.limits, [type]: { ...prev.limits[type], singleMax: value } },
+                                  }));
+                                }}
+                                className={inputCls}
+                                placeholder={locale === 'en' ? 'Unlimited' : '不限'}
+                              />
+                            </div>
+                            <div>
+                              <label className={`mb-1 block text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                {locale === 'en' ? 'Daily Limit' : '每日总限额'}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={instanceForm.limits[type]?.dailyLimit ?? ''}
+                                onChange={(e) => {
+                                  const value = e.target.value ? Number(e.target.value) : undefined;
+                                  setInstanceForm((prev) => ({
+                                    ...prev,
+                                    limits: { ...prev.limits, [type]: { ...prev.limits[type], dailyLimit: value } },
+                                  }));
+                                }}
+                                className={inputCls}
+                                placeholder={locale === 'en' ? 'Unlimited' : '不限'}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className={subCardCls}>
+                <h3 className={sectionTitleCls}>{t.instanceConfig}</h3>
+                <p className={sectionHintCls}>
+                  {locale === 'en'
+                    ? 'Keep one provider instance focused on one real upstream account when possible.'
+                    : '建议一个实例尽量对应一个真实上游商户，避免多套凭证混在一起。'}
+                </p>
+                <div className="mt-4 space-y-3">
                   {(PROVIDER_CONFIG_FIELDS[instanceForm.providerKey] ?? []).map((field) => (
                     <div key={field.key}>
-                      <label
-                        className={`block text-xs font-medium mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
-                      >
+                      <label className={`mb-1 block text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         {field.label[locale]}
                         {field.optional ? (
-                          <span className="ml-1 opacity-50">({locale === 'en' ? 'optional' : '可选'})</span>
+                          <span className="ml-1 opacity-60">({locale === 'en' ? 'optional' : '可选'})</span>
                         ) : (
-                          <span className="text-red-500 ml-0.5">*</span>
+                          <span className="ml-0.5 text-red-500">*</span>
                         )}
                       </label>
                       {field.multiline ? (
@@ -1423,7 +1863,7 @@ function PaymentConfigContent() {
                               config: { ...instanceForm.config, [field.key]: e.target.value },
                             })
                           }
-                          className={[inputCls, 'min-h-[112px] resize-y font-mono text-xs leading-5'].join(' ')}
+                          className={[inputCls, 'min-h-[120px] resize-y font-mono text-xs leading-5'].join(' ')}
                           autoComplete="off"
                           spellCheck={false}
                           placeholder={field.placeholder?.[locale]}
@@ -1443,125 +1883,10 @@ function PaymentConfigContent() {
                           placeholder={field.placeholder?.[locale]}
                         />
                       )}
-                      {field.hint && (
-                        <p className={`mt-1 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          {field.hint[locale]}
-                        </p>
-                      )}
+                      {field.hint && <p className={sectionHintCls}>{field.hint[locale]}</p>}
                     </div>
                   ))}
                 </div>
-              </div>
-
-              {/* ── 限额配置 (collapsible) ── */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setLimitsOpen(!limitsOpen)}
-                  className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${isDark ? 'text-slate-300 hover:text-slate-100' : 'text-slate-700 hover:text-slate-900'}`}
-                >
-                  <span
-                    className="inline-block transition-transform text-[10px]"
-                    style={{ transform: limitsOpen ? 'rotate(90deg)' : 'none' }}
-                  >
-                    ▶
-                  </span>
-                  {locale === 'en' ? 'Limits' : '限额配置'}
-                  {Object.values(instanceForm.limits).some((l) => l.dailyLimit || l.singleMin || l.singleMax) && (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'}`}
-                    >
-                      {locale === 'en' ? 'configured' : '已配置'}
-                    </span>
-                  )}
-                </button>
-                {limitsOpen && (
-                  <div className="mt-2 space-y-3">
-                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {locale === 'en'
-                        ? 'Set per-channel transaction limits. Leave empty for unlimited.'
-                        : '设置每个渠道的单笔和日限额，留空为不限。'}
-                    </p>
-                    {(PROVIDER_SUPPORTED_TYPES[instanceForm.providerKey] || []).map((type) => (
-                      <div
-                        key={type}
-                        className={`rounded-lg border p-3 ${isDark ? 'border-slate-600 bg-slate-700/30' : 'border-slate-200 bg-slate-50/50'}`}
-                      >
-                        <div className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                          {PAYMENT_TYPE_LABELS[type]?.[locale] || type}
-                        </div>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className={`block text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                              {locale === 'en' ? 'Single Min' : '单笔最小'}
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={instanceForm.limits[type]?.singleMin ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value ? Number(e.target.value) : undefined;
-                                setInstanceForm((p) => ({
-                                  ...p,
-                                  limits: {
-                                    ...p.limits,
-                                    [type]: { ...p.limits[type], singleMin: val },
-                                  },
-                                }));
-                              }}
-                              className={inputCls}
-                              placeholder={locale === 'en' ? 'Unlimited' : '不限'}
-                            />
-                          </div>
-                          <div>
-                            <label className={`block text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                              {locale === 'en' ? 'Single Max' : '单笔最大'}
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={instanceForm.limits[type]?.singleMax ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value ? Number(e.target.value) : undefined;
-                                setInstanceForm((p) => ({
-                                  ...p,
-                                  limits: {
-                                    ...p.limits,
-                                    [type]: { ...p.limits[type], singleMax: val },
-                                  },
-                                }));
-                              }}
-                              className={inputCls}
-                              placeholder={locale === 'en' ? 'Unlimited' : '不限'}
-                            />
-                          </div>
-                          <div>
-                            <label className={`block text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                              {locale === 'en' ? 'Daily Limit' : '每日总限额'}
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={instanceForm.limits[type]?.dailyLimit ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value ? Number(e.target.value) : undefined;
-                                setInstanceForm((p) => ({
-                                  ...p,
-                                  limits: {
-                                    ...p.limits,
-                                    [type]: { ...p.limits[type], dailyLimit: val },
-                                  },
-                                }));
-                              }}
-                              className={inputCls}
-                              placeholder={locale === 'en' ? 'Unlimited' : '不限'}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -1573,7 +1898,7 @@ function PaymentConfigContent() {
                   setEditingInstance(null);
                   setError('');
                 }}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                className={`rounded-xl px-4 py-2 text-sm font-medium ${isDark ? 'text-slate-400 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 {t.cancel}
               </button>
@@ -1581,7 +1906,7 @@ function PaymentConfigContent() {
                 type="button"
                 onClick={saveInstance}
                 disabled={instanceSaving || !instanceForm.name.trim()}
-                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {instanceSaving ? t.saving : t.save}
               </button>

@@ -5,7 +5,7 @@
       "username": "demo-user",
       "email": "demo-user@example.com",
       "status": "active",
-      "balance": 1170.84,
+      "balance": 1232.54,
       "notes": "Primary demo account",
       "role": "user",
       "token": "mock-user-token"
@@ -137,7 +137,7 @@
       "user_id": 1001,
       "group_id": 201,
       "starts_at": "2026-06-19T17:10:00.283Z",
-      "expires_at": "2026-11-11T17:10:00.286Z",
+      "expires_at": "2026-12-11T17:10:00.286Z",
       "status": "active",
       "daily_usage_usd": 3.2,
       "weekly_usage_usd": 17.6,
@@ -149,7 +149,7 @@
       "assigned_at": "2026-06-19T17:10:00.283Z",
       "notes": "Seed subscription",
       "created_at": "2026-06-19T17:10:00.283Z",
-      "updated_at": "2026-06-22T16:34:03.625Z"
+      "updated_at": "2026-06-23T16:26:34.438Z"
     }
   ],
   "redeemCodes": [
@@ -252,6 +252,66 @@
       "used_by": 1001,
       "used_at": "2026-06-22T16:52:27.473Z",
       "notes": "sub2apipay recharge order:cmqpgduwe000c2pirruszqxm4"
+    },
+    {
+      "id": 11,
+      "code": "s2p_cmqquw6jp00044uirkrt6081ca4e",
+      "type": "balance",
+      "value": 12.34,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-23T16:26:09.201Z",
+      "notes": "sub2apipay recharge order:cmqquw6jp00044uirkrt1gsc1"
+    },
+    {
+      "id": 12,
+      "code": "s2p_cmqquwnwl00084uirx9p72a9ca03",
+      "type": "subscription",
+      "value": 19.9,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-23T16:26:34.438Z",
+      "notes": "sub2apipay subscription order:cmqquwnwl00084uirx9ph8wun"
+    },
+    {
+      "id": 13,
+      "code": "s2p_cmqqw8hks000cc5irlkk4be55bf8",
+      "type": "balance",
+      "value": 12.34,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-23T17:03:46.376Z",
+      "notes": "sub2apipay recharge order:cmqqw8hks000cc5irlkkow1e8"
+    },
+    {
+      "id": 14,
+      "code": "s2p_cmqqw8srh000gc5ir7bhf578352b",
+      "type": "balance",
+      "value": 12.34,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-23T17:03:54.359Z",
+      "notes": "sub2apipay recharge order:cmqqw8srh000gc5ir7bhqk4rm"
+    },
+    {
+      "id": 15,
+      "code": "s2p_cmqqw969d000kc5irrovfa0b193f",
+      "type": "balance",
+      "value": 12.34,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-23T17:04:40.093Z",
+      "notes": "sub2apipay recharge order:cmqqw969d000kc5irrov97ewi"
+    },
+    {
+      "id": 16,
+      "code": "s2p_cmqqwghyg000rc5ir11r2b21bc82",
+      "type": "balance",
+      "value": 12.34,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-06-23T17:09:58.961Z",
+      "notes": "sub2apipay recharge order:cmqqwghyg000rc5ir11rwlmpe"
     }
   ],
   "balanceLogs": [
@@ -567,12 +627,131 @@
       "app_code": "default",
       "status": 0,
       "created_at": "2026-06-23T01:27:21.877Z"
+    },
+    {
+      "id": 22,
+      "trade_no": "MOCKPAY000022",
+      "out_trade_no": "cmqquw6jp00044uirkrt1gsc1",
+      "money": "12.34",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqquw6jp00044uirkrt1gsc1&access_token=1782318363709.1001.y6lzM8VZvLen6qfIvJX2vw4sCffPr3SkbOZ1VOT7Mtg&app_code=e2e_mqquvwg2",
+      "name": "Sub2API 12.34 CNY",
+      "app_code": "e2e_mqquvwg2",
+      "status": 1,
+      "created_at": "2026-06-23T16:26:03.942Z",
+      "updated_at": "2026-06-23T16:26:04.522Z"
+    },
+    {
+      "id": 23,
+      "trade_no": "MOCKPAY000023",
+      "out_trade_no": "cmqquwnwl00084uirx9ph8wun",
+      "money": "19.90",
+      "type": "alipay",
+      "provider": "easypay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/easy-pay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqquwnwl00084uirx9ph8wun&access_token=1782318386363.1001.GDTDFfbaaBiR9_oYSAZOaXdMtZZ1cqiIp0U5oVxFwPo&app_code=e2e_mqquvwg2",
+      "name": "E2E Product e2e_mqquvwg2",
+      "app_code": "e2e_mqquvwg2",
+      "status": 1,
+      "created_at": "2026-06-23T16:26:26.370Z",
+      "updated_at": "2026-06-23T16:26:28.012Z"
+    },
+    {
+      "id": 24,
+      "trade_no": "MOCKPAY000024",
+      "out_trade_no": "manual-alipay-1782232077241",
+      "money": "12.34",
+      "type": "alipay_direct",
+      "provider": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "",
+      "return_url": "",
+      "name": "Alipay Official Demo",
+      "app_code": "default",
+      "status": 0,
+      "created_at": "2026-06-23T16:28:39.050Z",
+      "updated_at": "2026-06-23T16:28:39.050Z"
+    },
+    {
+      "id": 25,
+      "trade_no": "cmqqw8hks000cc5irlkkow1e8",
+      "out_trade_no": "cmqqw8hks000cc5irlkkow1e8",
+      "money": "12.34",
+      "type": "wxpay_direct",
+      "provider": "wxpay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/wxpay/notify",
+      "return_url": "",
+      "name": "Sub2API 12.34 CNY",
+      "app_code": "default",
+      "status": 1,
+      "created_at": "2026-06-23T17:03:38.373Z",
+      "updated_at": "2026-06-23T17:03:38.858Z",
+      "trade_kind": "NATIVE"
+    },
+    {
+      "id": 26,
+      "trade_no": "pi_cmqqw8srh000gc5ir7bhqk4rm",
+      "out_trade_no": "cmqqw8srh000gc5ir7bhqk4rm",
+      "money": "12.34",
+      "type": "stripe",
+      "provider": "stripe",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/stripe/webhook",
+      "return_url": "",
+      "name": "Sub2API 12.34 CNY",
+      "app_code": "default",
+      "status": 1,
+      "created_at": "2026-06-23T17:03:51.086Z",
+      "updated_at": "2026-06-23T17:03:51.572Z",
+      "stripe_client_secret": "pi_cmqqw8srh000gc5ir7bhqk4rm_secret_mock",
+      "stripe_currency": "cny"
+    },
+    {
+      "id": 27,
+      "trade_no": "cmqqw969d000kc5irrov97ewi",
+      "out_trade_no": "cmqqw969d000kc5irrov97ewi",
+      "money": "12.34",
+      "type": "alipay_direct",
+      "provider": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/alipay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqqw969d000kc5irrov97ewi&access_token=1782320650727.0.x1jMKciTIFKmM5s8cIMtlz7GS2sWx5KW4f9Xz23aqXg&app_code=mockfull_mqqw71ab",
+      "name": "Sub2API 12.34 CNY",
+      "app_code": "default",
+      "status": 1,
+      "created_at": "2026-06-23T17:04:10.748Z",
+      "updated_at": "2026-06-23T17:04:32.906Z",
+      "gateway_app_id": "mock-alipay-mqqw71ab",
+      "gateway_merchant_id": "2088100000000000"
+    },
+    {
+      "id": 28,
+      "trade_no": "cmqqwghyg000rc5ir11rwlmpe",
+      "out_trade_no": "cmqqwghyg000rc5ir11rwlmpe",
+      "money": "12.34",
+      "type": "alipay_direct",
+      "provider": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/alipay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqqwghyg000rc5ir11rwlmpe&access_token=1782320993529.0.EwT1F-wNRSU_jA0Ld-9E9mkcjGPrpscOP0prrce3ask&app_code=aliok_mqqwgd38",
+      "name": "Sub2API 12.34 CNY",
+      "app_code": "default",
+      "status": 1,
+      "created_at": "2026-06-23T17:09:53.542Z",
+      "updated_at": "2026-06-23T17:09:53.548Z",
+      "gateway_app_id": "mock-alipay-mqqwgd38",
+      "gateway_merchant_id": "2088100000000000"
     }
   ],
   "nextIds": {
-    "redeemCode": 11,
+    "redeemCode": 17,
     "subscription": 2,
-    "paymentSession": 22,
+    "paymentSession": 29,
     "app": 2
   },
   "apps": [
@@ -584,5 +763,32 @@
       "created_at": "2026-06-23T01:23:30.171Z",
       "updated_at": "2026-06-23T01:23:30.171Z"
     }
-  ]
+  ],
+  "providerConfigs": {
+    "default": {
+      "alipay": {
+        "appId": "mock-alipay-mqqwgd38",
+        "privateKey": "-----BEGIN PRIVATE KEY-----\nMIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQCW9P3AUb4m3vLn\nLTebkPJ1kTkAHKgjFNGtHb45uFRWuSgqkmmmxXNrdgpdQCjjyvi2+negROa5LCum\nr0LvwTvpbXVv+Fj/uHI2LDzWTkxLUeyXLu+OcPyM5Qx8o76jCuD7Mx+r0L+Rx/qJ\nyDgQGhgfyewHSzClMQMQ9a0YEPdJ49saTt99g76HstxKYbdV7Sz6UIi2eSytUstn\nzRJQDGfSVrPwMGi3TqQsG4VtSJFybnug93CZ7gKBLb4nbhYp0MY+IHxQZbO5k7Lr\nSAnlki2x71uumL0feT6CXYT5HeMqjYfuZ69K8czni4TbswuPyh/GTJaXTkmmDGtf\nn6/2i8ABAgMBAAECgf8sTyq+tmQ+u3tsX9lgYpkRoCEbC+CXkBcgJwiKev5Gdlvm\nIxO7Taduvu4CukAhwXIbHtdr6oRg+pYeoC5zVfutrU7LRdEi9Un+nLRjV7zEFdo3\nqrPK0oPhIH7S8mHeC+W0sZYH/T30sQdraevmO8KP20dsk4DYadOhJsTMlMCTgZFc\nzr3tV5ZanzIYVa/gkXudIC99bTpNAPvVbV/is5o1zOvv7vl7sV87R5P6G75h9Xwk\nOEbRkDprUkEZ+ETAKju6mF5qYpa+rg1O3VZQF1qj+uIBoi+kocfjabaAzWCMz+dn\n+2LBDDA6j5YkgKo8phG0GH5RxjkSg0C7aaeS4IkCgYEA0+R67TSMnfBbFeDkNP+o\nzzN0TrHiFa2nxeH50xoywnru/ngLhautupDYGK1AXZxJ/ydScOuNQKWWJNoZgHNL\nh4QJHh8B77WIJo7m94n+K2ndFsDnY9ivLr5Ra585G1JbV46TKn5mMz0phDcYjfYi\nxerIkfRF8n7JrfpTdyI/lFcCgYEAtmFTGpxj2pHDaHi3rmP/fUc4aJbyFvQr/7/N\nLw6nzRBviJ0jujQvCIaMlzEKIKSKK1ebyYcDo736iULVRWNHfWKVkzSpWPzNdQpp\nlKxeolf3qjTv9oJMgsyiYqQQBHREHCm1l7SuWfDVfcJ5kH7KUtE4ZYjP+7Dr+WXz\nTNRu12cCgYAohXgwpq0BgzaYD4L007N/tHJYnlIDHUuJXza8dTUh1gqgZWqmrHcz\nx4Fb7r3xaPMJtYZhi9pec4wsDf10gBgAmXJ47SscoVWhMhDfY+dUfBFIyak2gfi2\ncrT1ZOSx4eUP8HcaWEPJJrgqzbKHa3uo58ZlixZZUn/VIpsVnFoWTwKBgBoAD/fo\nObgMNb5sD0uWR/MVNy557nNlReyE7Hx762IpqKziMhi2ncnqXJqlTBtROb1qFPSL\nAfLS/6eX1o241JVEe6xrwoTELYo0/M5MMIWWYuFqAJe1BbFT+QZ0+y+XX6pgK9o/\n0OdTlSwDkI8P9EoQN6kJ8xSfqVR5u1DFrDObAoGBAI/MjF1cwnYYVAV7Bp9nwDu6\nwjDE8x/93flc1rpa9rPzZ/LpiUu0m62SqtC9M/Jsryla5f7wGHwG2HKNUvy2O+ZT\ncikjW25WESbDHTnrkyU+CxiRydkHdDJpyMpQzy/1sGHbfqLGyhRRTc6fBguWE7VB\nuDjLUHcwZRW1SxIn27cl\n-----END PRIVATE KEY-----\n",
+        "sellerId": "2088100000000000",
+        "gatewayBase": "http://localhost:3001/mock-api/alipay/gateway.do",
+        "updated_at": "2026-06-23T17:09:44.855Z"
+      },
+      "wxpay": {
+        "appId": "wx0000000071",
+        "mchId": "1900000109",
+        "apiV3Key": "0123456789abcdef0123456789abcdef",
+        "publicKeyId": "PUB_mqqw71ab",
+        "privateKey": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC6GUbtFd03XTjm\nKoMLcMQvwiJfUEOIj8brrYn3q2Qf4OL2xQLBjvR2CuC/oDRJJIfGbg0xvx2HtJqF\nsvbGsV3GBq3ZHi/C4xGlsOeoOuHCa9mEFlT3WG0l7dWvDShYTdZRM3zdkQhW9fpp\n9csZKOHkDvbs15rBbS1/4ORyqtEKABdGary2sJIzPDpYIdScip7tjDG8zViB4rK3\n4t9KCBSwVEiVWwGetTstPDLDNDnclQogu87Dxcb/McqAyVL6YqsuKs74utIgDsyA\n1C2IhuqtcFf8p74oaRwmiNWF2YeeAlze7ioGeghGOuC52jTnPhKB5/sIjfOtMR2T\nCFyZF4N/AgMBAAECggEAA+MtSRyQz2xCGQTAUgfcAUdj4mvRzVN7i0bHwAWzhLr0\n4sTAxvxOfPzDLx2QmgqKT4nS+rwMSN5r7+kKIKJp3A4dqZBo3QBTSQvF+wyn1KDe\nHVU+FyCgvw8VzJ9QvW96z51suVAjRXXD8lyxDmh9N39chxwF3o6CSc6P1xlcXoIS\n14Gqkh1Kf7650BcNMdilkf5liQiChHLyLaDfZ/T4KXZRqfcuZXzgzIA12DJqprsu\nRcTQfYCMxg5dH+BnizN3SzV7DZRFArmxGBDWsYHU+OseNXbv+dJMxFP9jxgV8v8p\n4UKEoILgQoRZsIK9q09G81Ou2o/UKHpgcjXdlBB0sQKBgQDoJGE1NgdqQIlPBy1a\nk9HS7x1g/MbFQ78V3RBdfLysJXzzzJ2mnJ7mJW7iOUIcLJQRoGaluFRlxvgtgroH\nQ75qPUeL4DPSluNd7p2Kz3HCIRBWAr87QVrv0pCI5OsiryqiR+T7CT6f/SD57IUB\nZ9l5iqFYHjNaNRAU2t4Bn2NTCQKBgQDNOYEBpzVKKXJ81b+wqBLaFgAzZ5E5fdGX\nIy5RBwG1gTbdDWWV+W8aPgeX5Va/yXeG0OmWkPOqaNGb01NIy5VjaMumwSOXkORo\nElHLnF+uTGemnMGIjr2ncS/b2mfvS8JvJpNlZmrylybz6vwoFNByVNfmYDjOJTBh\nzrvhEOKcRwKBgCJjITMsqbSHks9uFL3SH8bLPOLdDuSxwGCQupfenmQxuWyz5raD\nhNY6vU4thSl/QP/LbuklgPsCmkjDkKL62f4Kzcpej86mI1AKxLOHPyaulyjmh0VT\nzRCxdE+S+XHN2NbpJ3Y4TFqOuI/NBXbL1181tejDsH+wVI2CTliXL7NhAoGBAL2a\nFvn0BWPTDxcOU99eKKycDutvD9jRyUWdFzl9A7MxAgMQUX5RyLex/0nydEcUVv2T\nHXwhxzz1QlJ410U18Xq6YwxY/A0XrC4KXs+CVVOu+0QPJy6G0elUxSaVjdijYatX\nNG5GRSCDTVWlD/nn4P0ALceFtnWeHij+2s2A0BwZAoGALtuAA30Ki5aSoOUFKvWG\nVY8xP5U0kd2NnfZfDYO0KrI5uLJ4u71eL9sDlF60XHvY27GHgEbpsvLWkqhhwhSF\ngGQn3/F5YMjkeu6PdcNSj5YhFFi71q9iLSb9WAULYAHJzi2Rw1XpZRHTXs7qIOmb\nQlDBdbfUG/mcBwSNxJcaKcA=\n-----END PRIVATE KEY-----\n",
+        "apiBase": "http://localhost:3001",
+        "updated_at": "2026-06-23T17:02:42.098Z"
+      },
+      "stripe": {
+        "secretKey": "sk_test_mqqw71ab",
+        "publishableKey": "pk_test_mqqw71ab",
+        "webhookSecret": "whsec_mqqw71ab",
+        "apiBase": "http://localhost:3001",
+        "updated_at": "2026-06-23T17:02:42.100Z"
+      }
+    }
+  }
 }
