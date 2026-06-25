@@ -1052,12 +1052,31 @@
       "updated_at": "2026-06-25T01:26:36.434Z",
       "stripe_client_secret": "pi_cmqstggxh001dryirk0hluobn_secret_mock",
       "stripe_currency": "cny"
+    },
+    {
+      "id": 41,
+      "trade_no": "cmqtd3etr0002kggue08st5xg",
+      "out_trade_no": "cmqtd3etr0002kggue08st5xg",
+      "money": "10.00",
+      "type": "alipay_direct",
+      "provider": "alipay",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/alipay/notify",
+      "return_url": "http://localhost:3000/pay/result?order_id=cmqtd3etr0002kggue08st5xg&access_token=1782469865003.1001._I9FKvZj1ZoxqY8mmXdwrVtk_ZQq7SI_mV6Xh1xgq7w&app_code=default",
+      "name": "DefaultPay 10.00",
+      "app_code": "default",
+      "status": 0,
+      "created_at": "2026-06-25T10:31:05.005Z",
+      "updated_at": "2026-06-25T10:31:05.005Z",
+      "gateway_app_id": "mock-alipay-app",
+      "gateway_merchant_id": "2088100000000000",
+      "gateway_private_key": "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDODq0z8k2a42UhdQBy6p9tfW2D6Y0xljr2+Jm4qjlwm7P2qynQ3SaRIZq+qE5wEkSLaqbfmB7Q6AupNp9olcMquwqgn8a4SX0JdE28M1XBJqvbkpOcJx3xKRRvuv/erhuBfknuIAl/VsLwh8Pm9XopDlk+RznTVto9aTg4jH53DcNHiitNblxQ1lOKt3vTYE0Y9rIN4zV79wvh/Vcm1M/5Twjlwm2EA9vOoQFmj8+4+1gDDl9bjvlw9+SkNqdLFb1VwDSzM7NmwqlGHr6VPE3r7vfdueK/ujgH0vAW0WJO4KLo/5cwS4s3SZXBrx1IvC9zR0KJ6ZXTYtK5s0xJAgMBAAECggEABBZ/6aFP4xjAQfC6n56KxFUF0TrlwPv8v3HoALxY2I+xT5F7zxrtXqNE8Czq0bPxzCArjaafHoS4qUWSj5F3GmElMw7K9zHLnR4z5m5VQyQ7y4WaubjjTq/XpA/x86z2g7uS6UlyA6P6JmPpDlPqSW5A6wv1i0A7QcyYJcNh0xY6phm1mWHxejjFJg5bxA2qT7Xpfd3WwCtuByR9bP5/7fx0mRzLfNUj0O9lA4ssHBr2CkU5VhMmGHckKkWDoBwyx+gELG1lQ86SC+M7uVdYfCIVM4lC24YyP5Q/7nMuWNtkEPe4dWCuRmf0pzI6YzZ0l9Xhkljyz0Ql8uOwQQKBgQD9VYJe4vZYQgWtXn1L9wKVfmM7nSJOga7vlYgKPExJs0NYNZBIrKX3qPw5ZWJJws9zpa2d4+MPYmAwHBWtx4sH7fz5wYoE4YdYlVN7QapNS9B0yPgQpLrSOr47+ddxK5uYIIn8cG7Ngls+YWk7IZZaNfSmnqlHqJ6fSdEJYv9m8QKBgQDP7wiHsg1vgJjxsVh1xDxjb5IfLf4gPZjCJ3EKhz2T0ciSQQQvDo6WcM0Fq0JE6L5NEVgQhQNVL1op9+HKhvk4X6BqGtEjWv3F8lAN2KRfSspHZAc91BkScj4ro4is9B4HvOHOn9jCzrqyptY6J7n/7mFh+2dL8tLhOe5r/K4SQQKBgQDZtOGp3dy5crfVQzkhmScL3yQrcUwcl9B4Vt++KQLmPKKFAvLFCA6kZJyEc3hrknWsjxg+3F1nnPZSqw1mP6rP8vwgYbklrJ3S6OoXvDtHrKxUOd9GTL1nSg6M7Pb1eo9/zwQfTOOVl9An3l8HQ8Ye+z7QozA38SZCjWv+KQajQQKBgD7Wwd49q1n90xDbAG+F8xB5vXzwnRK0yB9j4fPzmpeT4xq3SB8y+KhxozwoZnMZJqdvmGd0hDL8PCQ6M+pWqxeEocmVly1cBb6TqKumkD6cSA7gdduUtF0nRGAK4EU54fJ7AFVPErFm3CLJj0q7k2D2aDLThIpp+eM2CW3sc29hAoGACVbGxF/4PPbOM8OPVAcGU0dVKIJg6d2o3Ei9W30CqT8c8K8prD3CLgTdrtEbhSIqMqD2sVOhmlV7tcz9Bb0JGM9cyI+gvU8dvnEwAQa4EobZWVnLJ9Qj/cItCdn2HyhSeVbU4I04n+dl+9jM53V7Cm9Ug5hBQWL0Zi7I4bb4Ugo="
     }
   ],
   "nextIds": {
     "redeemCode": 25,
     "subscription": 2,
-    "paymentSession": 41,
+    "paymentSession": 42,
     "app": 2
   },
   "apps": [

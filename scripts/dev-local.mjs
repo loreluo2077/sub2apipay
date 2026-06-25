@@ -1,16 +1,23 @@
 /**
  * 跨平台本地开发启动脚本
  * 先关闭占用 3000/3001 端口的进程，再同时启动 dev 和 mock-sub2api 服务
+ * 日志同时写入 logs/ 目录和终端
  *
  * @author Alfie
  */
 
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createWriteStream, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 const PORTS = [3000, 3001];
 const isWindows = process.platform === 'win32';
+
+// 确保 logs 目录存在
+const LOGS_DIR = join(process.cwd(), 'logs');
+mkdirSync(LOGS_DIR, { recursive: true });
 
 /**
  * 查找占用指定端口的 PID 列表（跨平台）
@@ -75,22 +82,48 @@ async function killPorts(ports) {
 }
 
 /**
- * 启动子进程，继承当前终端的 stdout/stderr
- * @param {string} name    服务名称（用于日志前缀）
+ * 启动子进程，日志同时写入终端和 logs/<name>.log 文件
+ * @param {string} name    服务名称（用于日志前缀和文件名）
  * @param {string} cmdline 完整命令行字符串
  * @returns {import('node:child_process').ChildProcess}
  */
 function startService(name, cmdline) {
+  const logFile = join(LOGS_DIR, `${name}.log`);
+  const fileStream = createWriteStream(logFile, { flags: 'a' });
+
+  // 写入启动分隔线
+  const startLine = `\n${'='.repeat(60)}\n[${new Date().toISOString()}] Starting ${name}\n${'='.repeat(60)}\n`;
+  fileStream.write(startLine);
+  process.stdout.write(startLine);
+
   const child = spawn(cmdline, {
-    stdio: 'inherit',
+    stdio: ['ignore', 'pipe', 'pipe'],
     shell: true,
     env: process.env,
   });
-  child.on('exit', (code) => {
-    if (code !== 0 && code !== null) {
-      console.error(`[${name}] exited with code ${code}`);
-    }
+
+  // stdout 同时写终端和文件
+  child.stdout.on('data', (chunk) => {
+    process.stdout.write(chunk);
+    fileStream.write(chunk);
   });
+
+  // stderr 同时写终端和文件
+  child.stderr.on('data', (chunk) => {
+    process.stderr.write(chunk);
+    fileStream.write(chunk);
+  });
+
+  child.on('exit', (code) => {
+    const msg = `[${name}] process exited with code ${code}\n`;
+    fileStream.write(msg);
+    if (code !== 0 && code !== null) {
+      process.stderr.write(msg);
+    }
+    fileStream.end();
+  });
+
+  console.log(`  [${name}] log → ${logFile}`);
   return child;
 }
 
