@@ -5,11 +5,42 @@ const mockVerifyAdminToken = vi.fn();
 const mockGetAllSystemConfigs = vi.fn();
 const mockSetSystemConfigs = vi.fn();
 const mockGetSystemConfig = vi.fn();
+const mockGetAppConfigValues = vi.fn();
+const mockSetAppConfigValues = vi.fn();
+const mockResolveAppByCode = vi.fn();
 const mockGroupBy = vi.fn();
 
 vi.mock('@/lib/admin-auth', () => ({
   verifyAdminToken: (...args: unknown[]) => mockVerifyAdminToken(...args),
   unauthorizedResponse: () => NextResponse.json({ error: '未授权' }, { status: 401 }),
+}));
+
+vi.mock('@/lib/app-context', () => ({
+  resolveAppByCode: (...args: unknown[]) => mockResolveAppByCode(...args),
+}));
+
+vi.mock('@/lib/app-config', () => ({
+  APP_CONFIG_KEYS: [
+    'ENABLED_PAYMENT_TYPES',
+    'ENABLED_PROVIDERS',
+    'PRODUCT_NAME_PREFIX',
+    'PRODUCT_NAME_SUFFIX',
+    'BALANCE_PAYMENT_DISABLED',
+    'CANCEL_RATE_LIMIT_ENABLED',
+    'CANCEL_RATE_LIMIT_WINDOW',
+    'CANCEL_RATE_LIMIT_UNIT',
+    'CANCEL_RATE_LIMIT_MAX',
+    'CANCEL_RATE_LIMIT_WINDOW_MODE',
+    'MAX_PENDING_ORDERS',
+    'RECHARGE_MIN_AMOUNT',
+    'RECHARGE_MAX_AMOUNT',
+    'DAILY_RECHARGE_LIMIT',
+    'ORDER_TIMEOUT_MINUTES',
+    'LOAD_BALANCE_STRATEGY',
+    'DEFAULT_DEDUCT_BALANCE',
+  ],
+  getAppConfigValues: (...args: unknown[]) => mockGetAppConfigValues(...args),
+  setAppConfigValues: (...args: unknown[]) => mockSetAppConfigValues(...args),
 }));
 
 vi.mock('@/lib/system-config', () => ({
@@ -31,7 +62,7 @@ import { GET, PUT } from '@/app/api/admin/config/route';
 function createRequest(method = 'GET', body?: object) {
   const headers: Record<string, string> = { Authorization: 'Bearer test-admin-token' };
   if (body) headers['Content-Type'] = 'application/json';
-  return new NextRequest('https://pay.example.com/api/admin/config', {
+  return new NextRequest('https://pay.example.com/api/admin/config?app_code=default', {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -42,6 +73,26 @@ describe('GET /api/admin/config', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockVerifyAdminToken.mockResolvedValue(true);
+    mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
+    mockGetAppConfigValues.mockResolvedValue({
+      ENABLED_PAYMENT_TYPES: 'alipay,wxpay',
+      ENABLED_PROVIDERS: 'easypay,alipay',
+      PRODUCT_NAME_PREFIX: 'Sub2API',
+      PRODUCT_NAME_SUFFIX: 'CNY',
+      BALANCE_PAYMENT_DISABLED: 'false',
+      CANCEL_RATE_LIMIT_ENABLED: 'false',
+      CANCEL_RATE_LIMIT_WINDOW: '1',
+      CANCEL_RATE_LIMIT_UNIT: 'day',
+      CANCEL_RATE_LIMIT_MAX: '10',
+      CANCEL_RATE_LIMIT_WINDOW_MODE: 'rolling',
+      MAX_PENDING_ORDERS: '3',
+      RECHARGE_MIN_AMOUNT: '10',
+      RECHARGE_MAX_AMOUNT: '1000',
+      DAILY_RECHARGE_LIMIT: '0',
+      ORDER_TIMEOUT_MINUTES: '5',
+      LOAD_BALANCE_STRATEGY: 'round-robin',
+      DEFAULT_DEDUCT_BALANCE: 'true',
+    });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -53,18 +104,16 @@ describe('GET /api/admin/config', () => {
   it('returns configs with sensitive values masked', async () => {
     mockGetAllSystemConfigs.mockResolvedValue([
       { key: 'SUB2API_ADMIN_API_KEY', value: 'my-super-secret-key-12345', group: 'general', label: null },
-      { key: 'RECHARGE_MIN_AMOUNT', value: '10', group: 'general', label: null },
     ]);
 
     const res = await GET(createRequest());
     const data = await res.json();
+    const target = data.configs.find((config: { key: string }) => config.key === 'SUB2API_ADMIN_API_KEY');
 
     expect(res.status).toBe(200);
-    // SUB2API_ADMIN_API_KEY contains "KEY" → sensitive → masked
-    expect(data.configs[0].value).toBe('*********************2345');
-    expect(data.configs[0].value).not.toBe('my-super-secret-key-12345');
-    // RECHARGE_MIN_AMOUNT → not sensitive → not masked
-    expect(data.configs[1].value).toBe('10');
+    expect(target.value).toBe('*********************2345');
+    expect(target.value).not.toBe('my-super-secret-key-12345');
+    expect(data.configs.some((config: { key: string; value: string }) => config.key === 'RECHARGE_MIN_AMOUNT' && config.value === '10')).toBe(true);
   });
 
   it('masks short sensitive values (<=4 chars) to ****', async () => {
@@ -74,8 +123,9 @@ describe('GET /api/admin/config', () => {
 
     const res = await GET(createRequest());
     const data = await res.json();
+    const target = data.configs.find((config: { key: string }) => config.key === 'STRIPE_SECRET_KEY');
 
-    expect(data.configs[0].value).toBe('****');
+    expect(target.value).toBe('****');
   });
 
   it('masks values for keys containing PASSWORD, PRIVATE, SECRET', async () => {
@@ -87,10 +137,13 @@ describe('GET /api/admin/config', () => {
 
     const res = await GET(createRequest());
     const data = await res.json();
+    const password = data.configs.find((config: { key: string }) => config.key === 'DB_PASSWORD');
+    const privateKey = data.configs.find((config: { key: string }) => config.key === 'ALIPAY_PRIVATE_KEY');
+    const secret = data.configs.find((config: { key: string }) => config.key === 'MY_SECRET');
 
-    expect(data.configs[0].value).toMatch(/^\*+d123$/);
-    expect(data.configs[1].value).toMatch(/^\*+data$/);
-    expect(data.configs[2].value).toMatch(/^\*+-val$/);
+    expect(password.value).toMatch(/^\*+d123$/);
+    expect(privateKey.value).toMatch(/^\*+data$/);
+    expect(secret.value).toMatch(/^\*+-val$/);
   });
 
   it('returns 500 on error', async () => {
@@ -105,6 +158,8 @@ describe('PUT /api/admin/config', () => {
     vi.clearAllMocks();
     mockVerifyAdminToken.mockResolvedValue(true);
     mockSetSystemConfigs.mockResolvedValue(undefined);
+    mockSetAppConfigValues.mockResolvedValue(undefined);
+    mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -152,11 +207,12 @@ describe('PUT /api/admin/config', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.success).toBe(true);
-    expect(mockSetSystemConfigs).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'RECHARGE_MIN_AMOUNT', value: '5' }),
-        expect.objectContaining({ key: 'RECHARGE_MAX_AMOUNT', value: '500' }),
-      ]),
+    expect(mockSetAppConfigValues).toHaveBeenCalledWith(
+      'app_default',
+      expect.objectContaining({
+        RECHARGE_MIN_AMOUNT: '5',
+        RECHARGE_MAX_AMOUNT: '500',
+      }),
     );
   });
 
@@ -171,10 +227,10 @@ describe('PUT /api/admin/config', () => {
     );
 
     expect(res.status).toBe(200);
-    // Only the non-masked config should be passed to setSystemConfigs
-    expect(mockSetSystemConfigs).toHaveBeenCalledWith([
-      expect.objectContaining({ key: 'RECHARGE_MIN_AMOUNT', value: '10' }),
-    ]);
+    expect(mockSetAppConfigValues).toHaveBeenCalledWith(
+      'app_default',
+      expect.objectContaining({ RECHARGE_MIN_AMOUNT: '10' }),
+    );
   });
 
   it('passes through actual (non-masked) sensitive values', async () => {
@@ -257,7 +313,7 @@ describe('PUT /api/admin/config', () => {
   });
 
   it('returns 500 on error', async () => {
-    mockSetSystemConfigs.mockRejectedValue(new Error('DB error'));
+    mockSetAppConfigValues.mockRejectedValue(new Error('DB error'));
     const res = await PUT(createRequest('PUT', { configs: [{ key: 'RECHARGE_MIN_AMOUNT', value: '5' }] }));
     expect(res.status).toBe(500);
   });

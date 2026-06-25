@@ -5,12 +5,12 @@ import { queryMethodLimits } from '@/lib/order/limits';
 import { ensureDBProviders, paymentRegistry } from '@/lib/payment';
 import { getPaymentDisplayInfo } from '@/lib/pay-utils';
 import { resolveLocale } from '@/lib/locale';
-import { getSystemConfig } from '@/lib/system-config';
 import { resolveEnabledPaymentTypes } from '@/lib/payment/resolve-enabled-types';
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { resolveAppByCode } from '@/lib/app-context';
 import { matchesSupportedType } from '@/lib/payment/provider-instance';
+import { getAppConfigValues } from '@/lib/app-config';
 
 export async function GET(request: NextRequest) {
   const locale = resolveLocale(request.nextUrl.searchParams.get('lang'));
@@ -50,22 +50,15 @@ export async function GET(request: NextRequest) {
     const supportedTypes = paymentRegistry.getSupportedTypes();
 
     // getUser 与 config 查询并行；config 完成后立即启动 queryMethodLimits
-    const configPromise = Promise.all([
-      getSystemConfig('ENABLED_PAYMENT_TYPES'),
-      getSystemConfig('BALANCE_PAYMENT_DISABLED'),
-      getSystemConfig('MAX_PENDING_ORDERS'),
-      getSystemConfig('RECHARGE_MIN_AMOUNT'),
-      getSystemConfig('RECHARGE_MAX_AMOUNT'),
-      getSystemConfig('DAILY_RECHARGE_LIMIT'),
-    ]).then(
-      async ([
-        configuredPaymentTypesRaw,
-        balanceDisabledVal,
-        maxPendingVal,
-        minAmountVal,
-        maxAmountVal,
-        dailyLimitVal,
-      ]) => {
+    const configPromise = getAppConfigValues(app.id).then(
+      async ({
+        ENABLED_PAYMENT_TYPES: configuredPaymentTypesRaw,
+        BALANCE_PAYMENT_DISABLED: balanceDisabledVal,
+        MAX_PENDING_ORDERS: maxPendingVal,
+        RECHARGE_MIN_AMOUNT: minAmountVal,
+        RECHARGE_MAX_AMOUNT: maxAmountVal,
+        DAILY_RECHARGE_LIMIT: dailyLimitVal,
+      }) => {
         let enabledTypes = resolveEnabledPaymentTypes(supportedTypes, configuredPaymentTypesRaw);
 
         const activeInstancesForApp = await prisma.paymentProviderInstance.findMany({

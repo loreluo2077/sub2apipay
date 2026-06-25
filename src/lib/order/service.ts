@@ -21,7 +21,7 @@ import { deriveOrderState, isRefundStatus } from './status';
 import { pickLocaleText, type Locale } from '@/lib/locale';
 import { getBizDayStartUTC } from '@/lib/time/biz-day';
 import { buildOrderResultUrl, createOrderStatusAccessToken } from '@/lib/order/status-access';
-import { getSystemConfig, getSystemConfigs } from '@/lib/system-config';
+import { getAppConfigValues } from '@/lib/app-config';
 import { selectInstance, getInstanceConfig, type LoadBalanceStrategy } from '@/lib/payment/load-balancer';
 import { createProviderFromInstance } from '@/lib/payment/provider-instance';
 import { resolveAppByCode } from '@/lib/app-context';
@@ -71,6 +71,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const todayStart = getBizDayStartUTC();
   const orderType = input.orderType ?? 'balance';
   const app = await resolveAppByCode(input.appCode);
+  const appConfig = await getAppConfigValues(app.id);
 
   // ── 订阅订单前置校验 ──
   let subscriptionPlan: {
@@ -86,7 +87,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   // R6: 余额充值禁用检查
   if (orderType === 'balance') {
-    const balanceDisabled = await getSystemConfig('BALANCE_PAYMENT_DISABLED');
+    const balanceDisabled = appConfig.BALANCE_PAYMENT_DISABLED;
     if (balanceDisabled === 'true') {
       throw new OrderError(
         'BALANCE_PAYMENT_DISABLED',
@@ -154,18 +155,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   }
 
   // ── 取消频率限制：超限后禁止创建新订单 ──
-  const rateLimitConfigs = await getSystemConfigs([
-    'CANCEL_RATE_LIMIT_ENABLED',
-    'CANCEL_RATE_LIMIT_WINDOW',
-    'CANCEL_RATE_LIMIT_UNIT',
-    'CANCEL_RATE_LIMIT_MAX',
-    'CANCEL_RATE_LIMIT_WINDOW_MODE',
-  ]);
-  if (rateLimitConfigs['CANCEL_RATE_LIMIT_ENABLED'] === 'true') {
-    const windowSize = parseInt(rateLimitConfigs['CANCEL_RATE_LIMIT_WINDOW'] || '1', 10) || 1;
-    const maxCount = parseInt(rateLimitConfigs['CANCEL_RATE_LIMIT_MAX'] || '10', 10) || 10;
-    const unit = rateLimitConfigs['CANCEL_RATE_LIMIT_UNIT'] || 'day';
-    const windowMode = rateLimitConfigs['CANCEL_RATE_LIMIT_WINDOW_MODE'] || 'rolling';
+  if (appConfig.CANCEL_RATE_LIMIT_ENABLED === 'true') {
+    const windowSize = parseInt(appConfig.CANCEL_RATE_LIMIT_WINDOW || '1', 10) || 1;
+    const maxCount = parseInt(appConfig.CANCEL_RATE_LIMIT_MAX || '10', 10) || 10;
+    const unit = appConfig.CANCEL_RATE_LIMIT_UNIT || 'day';
+    const windowMode = appConfig.CANCEL_RATE_LIMIT_WINDOW_MODE || 'rolling';
 
     let windowStart: Date;
     if (windowMode === 'fixed') {
@@ -247,22 +241,19 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const payAmountStr = calculatePayAmount(input.amount, feeRate);
   const payAmountNum = Number(payAmountStr);
 
-  const orderTimeoutConfig = await getSystemConfig('ORDER_TIMEOUT_MINUTES');
-  const orderTimeoutMinutes = orderTimeoutConfig
-    ? parseInt(orderTimeoutConfig, 10) || env.ORDER_TIMEOUT_MINUTES
+  const orderTimeoutMinutes = appConfig.ORDER_TIMEOUT_MINUTES
+    ? parseInt(appConfig.ORDER_TIMEOUT_MINUTES, 10) || env.ORDER_TIMEOUT_MINUTES
     : env.ORDER_TIMEOUT_MINUTES;
   const expiresAt = new Date(Date.now() + orderTimeoutMinutes * 60 * 1000);
 
   // 读取最大支付中订单数配置
-  const maxPendingConfig = await getSystemConfig('MAX_PENDING_ORDERS');
-  const maxPendingOrders = maxPendingConfig
-    ? parseInt(maxPendingConfig, 10) || DEFAULT_MAX_PENDING_ORDERS
+  const maxPendingOrders = appConfig.MAX_PENDING_ORDERS
+    ? parseInt(appConfig.MAX_PENDING_ORDERS, 10) || DEFAULT_MAX_PENDING_ORDERS
     : DEFAULT_MAX_PENDING_ORDERS;
 
   // 每日充值限额配置（参考 /api/user 覆盖模式：getSystemConfig → env 兜底）
-  const dailyLimitConfig = await getSystemConfig('DAILY_RECHARGE_LIMIT');
-  const maxDailyRechargeAmount = dailyLimitConfig
-    ? parseFloat(dailyLimitConfig) || env.MAX_DAILY_RECHARGE_AMOUNT
+  const maxDailyRechargeAmount = appConfig.DAILY_RECHARGE_LIMIT
+    ? parseFloat(appConfig.DAILY_RECHARGE_LIMIT) || env.MAX_DAILY_RECHARGE_AMOUNT
     : env.MAX_DAILY_RECHARGE_AMOUNT;
 
   // 将限额校验与订单创建放在同一个 serializable 事务中，防止并发突破限额
@@ -385,8 +376,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     let actualProvider = provider;
     let selectedInstanceId: string | undefined;
 
-    const strategyConfig = await getSystemConfig('LOAD_BALANCE_STRATEGY');
-    const strategy = (strategyConfig === 'least-amount' ? 'least-amount' : 'round-robin') as LoadBalanceStrategy;
+    const strategy = (appConfig.LOAD_BALANCE_STRATEGY === 'least-amount' ? 'least-amount' : 'round-robin') as LoadBalanceStrategy;
 
     const instanceResult = await selectInstance(app.id, provider.providerKey, strategy, input.paymentType, input.amount);
     if (instanceResult) {
@@ -432,9 +422,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       paymentSubject = subscriptionPlan.productName || `Sub2API 订阅 ${subscriptionGroupName || subscriptionPlan.name}`;
     } else {
       // R5: 余额订单使用前缀/后缀配置
-      const nameConfigs = await getSystemConfigs(['PRODUCT_NAME_PREFIX', 'PRODUCT_NAME_SUFFIX']);
-      const prefix = nameConfigs['PRODUCT_NAME_PREFIX']?.trim();
-      const suffix = nameConfigs['PRODUCT_NAME_SUFFIX']?.trim();
+      const prefix = appConfig.PRODUCT_NAME_PREFIX?.trim();
+      const suffix = appConfig.PRODUCT_NAME_SUFFIX?.trim();
       if (prefix || suffix) {
         paymentSubject = `${prefix || ''} ${payAmountStr} ${suffix || ''}`.trim();
       } else {

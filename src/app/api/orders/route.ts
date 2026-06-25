@@ -6,7 +6,8 @@ import { paymentRegistry } from '@/lib/payment';
 import { getEnabledPaymentTypes } from '@/lib/payment/resolve-enabled-types';
 import { getCurrentUserByToken } from '@/lib/sub2api/client';
 import { handleApiError } from '@/lib/utils/api';
-import { getSystemConfigs } from '@/lib/system-config';
+import { getAppConfigValues } from '@/lib/app-config';
+import { resolveAppByCode } from '@/lib/app-context';
 
 const createOrderSchema = z.object({
   app_code: z.string().min(1).optional(),
@@ -52,15 +53,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '无效的 token，请重新登录', code: 'INVALID_TOKEN' }, { status: 401 });
     }
 
+    const app = await resolveAppByCode(app_code);
+    const appConfig = await getAppConfigValues(app.id);
+
     // 订阅订单跳过金额范围校验（价格由服务端套餐决定）
     if (order_type !== 'subscription') {
-      // 优先读 DB 配置（管理后台在线配置），回退到环境变量
-      const amountConfigs = await getSystemConfigs(['RECHARGE_MIN_AMOUNT', 'RECHARGE_MAX_AMOUNT']);
-      const effectiveMin = amountConfigs['RECHARGE_MIN_AMOUNT']
-        ? parseFloat(amountConfigs['RECHARGE_MIN_AMOUNT']) || env.MIN_RECHARGE_AMOUNT
+      const effectiveMin = appConfig.RECHARGE_MIN_AMOUNT
+        ? parseFloat(appConfig.RECHARGE_MIN_AMOUNT) || env.MIN_RECHARGE_AMOUNT
         : env.MIN_RECHARGE_AMOUNT;
-      const effectiveMax = amountConfigs['RECHARGE_MAX_AMOUNT']
-        ? parseFloat(amountConfigs['RECHARGE_MAX_AMOUNT']) || env.MAX_RECHARGE_AMOUNT
+      const effectiveMax = appConfig.RECHARGE_MAX_AMOUNT
+        ? parseFloat(appConfig.RECHARGE_MAX_AMOUNT) || env.MAX_RECHARGE_AMOUNT
         : env.MAX_RECHARGE_AMOUNT;
       if (amount < effectiveMin || amount > effectiveMax) {
         return NextResponse.json({ error: `充值金额需在 ${effectiveMin} - ${effectiveMax} 之间` }, { status: 400 });
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate payment type is enabled (registry + ENABLED_PAYMENT_TYPES config)
-    const enabledTypes = await getEnabledPaymentTypes();
+    const enabledTypes = await getEnabledPaymentTypes(app.id);
     if (!enabledTypes.includes(payment_type)) {
       return NextResponse.json({ error: `不支持的支付方式: ${payment_type}` }, { status: 400 });
     }

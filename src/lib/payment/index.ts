@@ -5,7 +5,6 @@ import { StripeProvider } from '@/lib/stripe/provider';
 import { AlipayProvider } from '@/lib/alipay/provider';
 import { WxpayProvider } from '@/lib/wxpay/provider';
 import { getEnv } from '@/lib/config';
-import { getSystemConfig } from '@/lib/system-config';
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { createProviderFromInstance } from './provider-instance';
@@ -98,14 +97,17 @@ export function initPaymentProviders(): void {
  */
 export async function ensureDBProviders(): Promise<void> {
   initPaymentProviders();
-
-  const enabledProvidersRaw = await getSystemConfig('ENABLED_PROVIDERS');
-  if (!enabledProvidersRaw) return;
-
-  const dbProviders = enabledProvidersRaw
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const dbProviders = Array.from(
+    new Set(
+      (
+        await prisma.paymentProviderInstance.findMany({
+          where: { enabled: true },
+          select: { providerKey: true },
+        })
+      ).map((instance) => instance.providerKey.trim().toLowerCase()).filter(Boolean),
+    ),
+  );
+  if (dbProviders.length === 0) return;
 
   const env = getEnv();
 

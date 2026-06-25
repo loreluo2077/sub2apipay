@@ -518,7 +518,9 @@ function PaymentConfigContent() {
   const fetchConfig = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch(`/api/admin/config?token=${encodeURIComponent(token)}`);
+      const query = new URLSearchParams({ token });
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/config?${query.toString()}`);
       if (!res.ok) return;
       const data = await res.json();
       const configs: { key: string; value: string }[] = data.configs ?? [];
@@ -549,7 +551,7 @@ function PaymentConfigContent() {
     } catch {
       /* ignore */
     }
-  }, [token]);
+  }, [token, appCode]);
 
   const fetchInstances = useCallback(async () => {
     if (!token) return;
@@ -735,7 +737,9 @@ function PaymentConfigContent() {
     setRcSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/admin/config', {
+      const query = new URLSearchParams();
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/config${query.toString() ? `?${query.toString()}` : ''}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -903,8 +907,8 @@ function PaymentConfigContent() {
   const mockConsoleUrl = `${MOCK_CONSOLE_BASE_URL}/mock-console${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`;
   const appScopedNote =
     locale === 'en'
-      ? 'Payment instances below are scoped to the current app. Basic rules above are still shared system settings.'
-      : '下方支付实例严格归属于当前 App；上面的充值规则仍然是系统级共享设置。';
+      ? 'Payment instances and basic rules on this page are now scoped to the current app.'
+      : '这个页面里的支付实例和基础规则现在都按当前 App 独立生效。';
   const activeAppLabel = currentApp?.name || appCode || (locale === 'en' ? 'Unknown App' : '未识别应用');
 
   if (loading) {
@@ -1247,8 +1251,8 @@ function PaymentConfigContent() {
                 <h3 className={sectionTitleCls}>{t.rechargeRules}</h3>
                 <p className={sectionHintCls}>
                   {locale === 'en'
-                    ? 'These are shared recharge constraints. They affect all apps until we finish app-level split later.'
-                    : '这些仍是共享的充值约束，会影响所有 App；后续如果做 App 级隔离，再继续拆分。'}
+                    ? 'These recharge and order constraints are saved for the current app and take effect immediately.'
+                    : '这些充值与订单约束会保存到当前 App，并且立即生效。'}
                 </p>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

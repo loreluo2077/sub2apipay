@@ -61,6 +61,7 @@ function AdminContent() {
   const token = searchParams.get('token');
   const theme = searchParams.get('theme') === 'dark' ? 'dark' : 'light';
   const uiMode = searchParams.get('ui_mode') || 'standalone';
+  const appCode = searchParams.get('app_code') || '';
   const locale = resolveLocale(searchParams.get('lang'));
   const isDark = theme === 'dark';
   const isEmbedded = uiMode === 'embedded';
@@ -199,14 +200,16 @@ function AdminContent() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`/api/admin/config?token=${token}`)
+    const params = new URLSearchParams({ token });
+    if (appCode) params.set('app_code', appCode);
+    fetch(`/api/admin/config?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         const val = data?.configs?.find((c: { key: string }) => c.key === 'DEFAULT_DEDUCT_BALANCE');
         if (val) setDefaultDeductBalance(val.value === 'true');
       })
       .catch(() => {});
-  }, [token]);
+  }, [token, appCode]);
 
   if (!token) {
     return (

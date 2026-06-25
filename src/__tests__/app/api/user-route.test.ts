@@ -3,11 +3,31 @@ import { NextRequest } from 'next/server';
 
 const mockGetCurrentUserByToken = vi.fn();
 const mockGetUser = vi.fn();
-const mockGetSystemConfig = vi.fn();
+const mockGetAppConfigValues = vi.fn();
 const mockQueryMethodLimits = vi.fn();
 const mockGetSupportedTypes = vi.fn();
 const mockFindMany = vi.fn();
 const mockResolveAppByCode = vi.fn();
+
+const defaultAppConfig = {
+  ENABLED_PAYMENT_TYPES: '',
+  ENABLED_PROVIDERS: 'alipay,wxpay,stripe',
+  PRODUCT_NAME_PREFIX: '',
+  PRODUCT_NAME_SUFFIX: '',
+  BALANCE_PAYMENT_DISABLED: 'false',
+  CANCEL_RATE_LIMIT_ENABLED: 'false',
+  CANCEL_RATE_LIMIT_WINDOW: '1',
+  CANCEL_RATE_LIMIT_UNIT: 'day',
+  CANCEL_RATE_LIMIT_MAX: '10',
+  CANCEL_RATE_LIMIT_WINDOW_MODE: 'rolling',
+  MAX_PENDING_ORDERS: '3',
+  RECHARGE_MIN_AMOUNT: '1',
+  RECHARGE_MAX_AMOUNT: '1000',
+  DAILY_RECHARGE_LIMIT: '10000',
+  ORDER_TIMEOUT_MINUTES: '5',
+  LOAD_BALANCE_STRATEGY: 'round-robin',
+  DEFAULT_DEDUCT_BALANCE: 'true',
+};
 
 vi.mock('@/lib/sub2api/client', () => ({
   getCurrentUserByToken: (...args: unknown[]) => mockGetCurrentUserByToken(...args),
@@ -58,8 +78,8 @@ vi.mock('@/lib/locale', () => ({
   resolveLocale: () => 'zh',
 }));
 
-vi.mock('@/lib/system-config', () => ({
-  getSystemConfig: (...args: unknown[]) => mockGetSystemConfig(...args),
+vi.mock('@/lib/app-config', () => ({
+  getAppConfigValues: (...args: unknown[]) => mockGetAppConfigValues(...args),
 }));
 
 vi.mock('@/lib/db', () => ({
@@ -111,11 +131,7 @@ describe('GET /api/user', () => {
       wxpay: { maxDailyAmount: 1000 },
       stripe: { maxDailyAmount: 1000 },
     });
-    mockGetSystemConfig.mockImplementation(async (key: string) => {
-      if (key === 'ENABLED_PAYMENT_TYPES') return undefined;
-      if (key === 'BALANCE_PAYMENT_DISABLED') return 'false';
-      return undefined;
-    });
+    mockGetAppConfigValues.mockResolvedValue({ ...defaultAppConfig });
   });
 
   // ── Auth tests ──
@@ -154,7 +170,7 @@ describe('GET /api/user', () => {
 
   it('returns 404 for USER_NOT_FOUND', async () => {
     mockGetCurrentUserByToken.mockResolvedValue({ id: 1, status: 'active' });
-    mockGetSystemConfig.mockRejectedValue(new Error('USER_NOT_FOUND'));
+    mockGetAppConfigValues.mockRejectedValue(new Error('USER_NOT_FOUND'));
 
     const res = await GET(createRequest());
     expect(res.status).toBe(404);
@@ -171,10 +187,9 @@ describe('GET /api/user', () => {
   // ── Payment type filtering tests ──
 
   it('filters enabled payment types by ENABLED_PAYMENT_TYPES config', async () => {
-    mockGetSystemConfig.mockImplementation(async (key: string) => {
-      if (key === 'ENABLED_PAYMENT_TYPES') return 'alipay,wxpay';
-      if (key === 'BALANCE_PAYMENT_DISABLED') return 'false';
-      return undefined;
+    mockGetAppConfigValues.mockResolvedValue({
+      ...defaultAppConfig,
+      ENABLED_PAYMENT_TYPES: 'alipay,wxpay',
     });
 
     const response = await GET(createRequest());
@@ -186,10 +201,9 @@ describe('GET /api/user', () => {
   });
 
   it('falls back to supported payment types when ENABLED_PAYMENT_TYPES is empty', async () => {
-    mockGetSystemConfig.mockImplementation(async (key: string) => {
-      if (key === 'ENABLED_PAYMENT_TYPES') return '   ';
-      if (key === 'BALANCE_PAYMENT_DISABLED') return 'false';
-      return undefined;
+    mockGetAppConfigValues.mockResolvedValue({
+      ...defaultAppConfig,
+      ENABLED_PAYMENT_TYPES: '   ',
     });
 
     const response = await GET(createRequest());
@@ -212,9 +226,9 @@ describe('GET /api/user', () => {
   // ── Config defaults tests ──
 
   it('returns balanceDisabled from system config', async () => {
-    mockGetSystemConfig.mockImplementation(async (key: string) => {
-      if (key === 'BALANCE_PAYMENT_DISABLED') return 'true';
-      return undefined;
+    mockGetAppConfigValues.mockResolvedValue({
+      ...defaultAppConfig,
+      BALANCE_PAYMENT_DISABLED: 'true',
     });
 
     const response = await GET(createRequest());
@@ -229,9 +243,9 @@ describe('GET /api/user', () => {
   });
 
   it('uses configured maxPendingOrders when available', async () => {
-    mockGetSystemConfig.mockImplementation(async (key: string) => {
-      if (key === 'MAX_PENDING_ORDERS') return '5';
-      return undefined;
+    mockGetAppConfigValues.mockResolvedValue({
+      ...defaultAppConfig,
+      MAX_PENDING_ORDERS: '5',
     });
 
     const response = await GET(createRequest());

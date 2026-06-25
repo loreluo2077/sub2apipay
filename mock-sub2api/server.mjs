@@ -11,7 +11,7 @@ const DATA_DIR = path.resolve(process.cwd(), 'mock-sub2api', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'db.json');
 const MAIN_APP_URL = process.env.MOCK_SUB2API_MAIN_APP_URL || 'http://localhost:3000';
 const DEFAULT_APP_CODE = 'default';
-const DEFAULT_APP_NAME = 'Default App';
+const DEFAULT_APP_NAME = '默认应用';
 const DEFAULT_STRIPE_NOTIFY_URL = `${MAIN_APP_URL}/api/stripe/webhook`;
 
 function escapeHtml(value) {
@@ -89,7 +89,7 @@ function ensureAppShape(db) {
         code: DEFAULT_APP_CODE,
         name: DEFAULT_APP_NAME,
         status: 'active',
-        notes: 'Default business app',
+        notes: '默认业务应用',
         created_at: nowIso(),
         updated_at: nowIso(),
       },
@@ -101,7 +101,7 @@ function ensureAppShape(db) {
       code: DEFAULT_APP_CODE,
       name: DEFAULT_APP_NAME,
       status: 'active',
-      notes: 'Default business app',
+      notes: '默认业务应用',
       created_at: nowIso(),
       updated_at: nowIso(),
     });
@@ -139,7 +139,7 @@ function ensureMockApp(db, appCode, name) {
       code,
       name: name || code,
       status: 'active',
-      notes: 'Auto created from mock flow',
+      notes: '由 mock 流程自动创建',
       created_at: now,
       updated_at: now,
     });
@@ -545,11 +545,22 @@ function upsertPaymentSession(db, body) {
   if (!existing) {
     return createPaymentSession(db, body);
   }
+  let nextAppCode = body.app_code || existing.app_code || DEFAULT_APP_CODE;
+  const returnUrl = String(body.return_url || existing.return_url || '');
+  if (returnUrl) {
+    try {
+      const parsed = new URL(returnUrl);
+      nextAppCode = parsed.searchParams.get('app_code') || nextAppCode;
+    } catch {
+      /* ignore */
+    }
+  }
   for (const [key, value] of Object.entries(body || {})) {
     if (value !== undefined && value !== null && value !== '') {
       existing[key] = value;
     }
   }
+  existing.app_code = ensureMockApp(db, nextAppCode);
   existing.provider = provider;
   existing.type = body.type || existing.type;
   existing.updated_at = nowIso();
@@ -639,8 +650,8 @@ function signStripeEventPayload(payload, webhookSecret, timestamp) {
 
 function getActiveAppCode(url, db) {
   const code = (url.searchParams.get('app_code') || '').trim();
-  if (code && db.apps.some((app) => app.code === code)) {
-    return code;
+  if (code) {
+    return ensureMockApp(db, code);
   }
   return DEFAULT_APP_CODE;
 }
@@ -683,6 +694,21 @@ function buildMainPayUrlForUser(token, appCode, amount, paymentType) {
   if (amount) url.searchParams.set('amount', String(amount));
   if (paymentType) url.searchParams.set('payment_type', paymentType);
   return url.toString();
+}
+
+function findSessionByOrderId(db, appCode, orderId) {
+  const target = String(orderId || '').trim();
+  if (!target) return null;
+  return (
+    db.paymentSessions
+      .slice()
+      .reverse()
+      .find(
+        (session) =>
+          (session.app_code || DEFAULT_APP_CODE) === appCode &&
+          (session.out_trade_no === target || session.trade_no === target),
+      ) || null
+  );
 }
 
 function getUserById(db, userId) {
@@ -730,7 +756,7 @@ async function sendAlipayNotify(session, db = readDb()) {
   const providerConfig = getAppProviderConfig(db, session.app_code || DEFAULT_APP_CODE, 'alipay');
   const appId = session.gateway_app_id || providerConfig.appId || 'mock-alipay-app';
   const sellerId = session.gateway_merchant_id || providerConfig.sellerId || 'mock-seller';
-  const privateKey = providerConfig.privateKey || '';
+  const privateKey = session.gateway_private_key || providerConfig.privateKey || '';
 
   const params = {
     notify_time: nowIso().replace('T', ' ').slice(0, 19),
@@ -1005,16 +1031,13 @@ function renderLayout(title, body, options = {}) {
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <h1>Mock Dashboard</h1>
-      <div class="sub">Sub2API + payment gateway lab</div>
+      <h1>Mock 控制台</h1>
+      <div class="sub">Sub2API 支付联调控制台</div>
       <div class="stack">
         <a class="navlink" href="${escapeHtml(withAppCode('/mock-console', appCode))}">控制台总览</a>
-        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console#payments', appCode))}">支付会话</a>
         <a class="navlink" href="${escapeHtml(withAppCode('/mock-console/providers/alipay', appCode))}">支付宝 Mock</a>
         <a class="navlink" href="${escapeHtml(withAppCode('/mock-console/providers/wxpay', appCode))}">微信 Mock</a>
         <a class="navlink" href="${escapeHtml(withAppCode('/mock-console/providers/stripe', appCode))}">Stripe Mock</a>
-        <a class="navlink" href="${escapeHtml(withAppCode('/mock-console#users', appCode))}">用户与订阅</a>
-        <a class="navlink" href="${escapeHtml(withAppCode('/health', appCode))}" target="_blank">健康检查</a>
       </div>
       <div class="meta">
         <div><strong>当前 App</strong></div>
@@ -1026,11 +1049,11 @@ function renderLayout(title, body, options = {}) {
         <header>
           <div>
             <h1>${escapeHtml(title)}</h1>
-            <div class="sub">Local Sub2API and payment gateway console</div>
+            <div class="sub">本地 Sub2API 支付联调控制台</div>
           </div>
           <nav class="nav">
-            <a class="button" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">Open Pay</a>
-            <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">Open Admin</a>
+            <a class="button" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">打开前台</a>
+            <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">打开后台</a>
           </nav>
         </header>
         ${body}
@@ -1124,146 +1147,75 @@ function renderPaymentRows(db, appCode) {
     .join('');
 }
 
-function renderProviderSessions(db, provider, appCode) {
-  return db.paymentSessions
-    .slice()
-    .reverse()
-    .filter((session) => (session.app_code || DEFAULT_APP_CODE) === appCode && (session.provider || 'easypay') === provider)
-    .map((session) => {
-      const status = paymentStatusLabel(session.status);
-      const statusClass = status === 'paid' ? 'good' : status === 'pending' ? 'warn' : 'bad';
-      return `<tr>
-        <td><strong>${escapeHtml(session.trade_no)}</strong><div class="muted">${escapeHtml(session.out_trade_no)}</div></td>
-        <td>${escapeHtml(session.type)}</td>
-        <td>¥${escapeHtml(session.money)}</td>
-        <td><span class="tag ${statusClass}">${escapeHtml(status)}</span></td>
-        <td>${escapeHtml(session.created_at)}</td>
-        <td class="actions">
-          <a class="button" href="/mock-pay/${encodeURIComponent(session.trade_no)}" target="_blank">Open</a>
-          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/success`, appCode))}"><button class="success" type="submit">Success</button></form>
-          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/fail`, appCode))}"><button class="danger" type="submit">Fail</button></form>
-          <form method="post" action="${escapeHtml(withAppCode(`/mock-console/payments/${encodeURIComponent(session.trade_no)}/notify`, appCode))}"><button class="warn" type="submit">Notify</button></form>
-        </td>
-      </tr>`;
-    })
-    .join('');
+function renderPaymentLookupPanel(db, appCode) {
+  const currentApp = getAppByCode(db, appCode);
+  return `
+    <section class="panel">
+      <h2>按订单号打开模拟支付页</h2>
+      <div class="muted" style="margin-bottom:12px;">主站下单后保留主站支付页，把订单号贴到这里，就能直接打开对应的 mock 支付页。</div>
+      <form method="get" action="/mock-console/open-payment">
+        <div class="row">
+          <label><span>应用 Code</span><input name="app_code" value="${escapeHtml(appCode)}" required /></label>
+          <label><span>订单号 / 网关流水</span><input name="order_id" placeholder="例如 cmqsa1jhc000bryiru0jsf6gw" required /></label>
+        </div>
+        <div class="actions">
+          <button class="primary" type="submit">打开模拟支付页</button>
+        </div>
+      </form>
+      <div class="muted" style="margin-top:10px;">当前应用: <strong>${escapeHtml(currentApp?.name || DEFAULT_APP_NAME)}</strong> · code: <code>${escapeHtml(appCode)}</code></div>
+    </section>
+  `;
 }
 
 function renderConsolePage(db, appCode, notice = '') {
   const currentApp = getAppByCode(db, appCode);
-  const userOptions = db.users.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.username)} (#${escapeHtml(user.id)})</option>`).join('');
-  const groupOptions = db.groups.map((group) => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.name)} (#${escapeHtml(group.id)})</option>`).join('');
   const appOptions = db.apps
     .map((app) => `<option value="${escapeHtml(app.code)}" ${app.code === appCode ? 'selected' : ''}>${escapeHtml(app.name)} (${escapeHtml(app.code)})</option>`)
     .join('');
-  const scopedPayments = db.paymentSessions.filter((session) => (session.app_code || DEFAULT_APP_CODE) === appCode);
-  const pendingCount = scopedPayments.filter((session) => paymentStatusLabel(session.status) === 'pending').length;
-  const paidCount = scopedPayments.filter((session) => paymentStatusLabel(session.status) === 'paid').length;
   const body = `
     ${notice ? `<div class="panel"><strong>${escapeHtml(notice)}</strong></div>` : ''}
     <section class="panel">
       <div class="row">
         <label>
-          <span>Current App</span>
+          <span>当前应用</span>
           <select class="app-switch" onchange="if(this.value){ window.location.href='${escapeHtml('/mock-console?app_code=')}' + encodeURIComponent(this.value); }">
             ${appOptions}
           </select>
         </label>
         <label>
-          <span>Open Main App</span>
+          <span>打开主站</span>
           <div class="actions">
-            <a class="button primary" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">Open Pay Page</a>
-            <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">Open Admin</a>
+            <a class="button primary" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">打开前台支付页</a>
+            <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">打开后台</a>
           </div>
         </label>
       </div>
-      <div class="muted">Current app: <strong>${escapeHtml(currentApp?.name || DEFAULT_APP_NAME)}</strong> · code: <code>${escapeHtml(appCode)}</code></div>
+      <div class="muted">当前应用: <strong>${escapeHtml(currentApp?.name || DEFAULT_APP_NAME)}</strong> · code: <code>${escapeHtml(appCode)}</code></div>
     </section>
-    <section class="metrics">
-      <div class="metric"><div class="label">Users</div><div class="value">${db.users.length}</div><div class="hint">Shared test users</div></div>
-      <div class="metric"><div class="label">Payments (${escapeHtml(appCode)})</div><div class="value">${scopedPayments.length}</div><div class="hint">${paidCount} paid / ${pendingCount} pending</div></div>
-      <div class="metric"><div class="label">Subscriptions</div><div class="value">${db.subscriptions.length}</div><div class="hint">Cross-app mock subscriptions</div></div>
-      <div class="metric"><div class="label">Groups</div><div class="value">${db.groups.length}</div><div class="hint">Shared product groups</div></div>
-    </section>
+    ${renderPaymentLookupPanel(db, appCode)}
     <div class="grid">
       <section class="panel">
-        <h2>Launch Payment Demo</h2>
-        <form method="post" action="${escapeHtml(withAppCode('/mock-console/launch-payment', appCode))}">
-          <div class="row">
-            <label><span>User</span><select name="user_id">${userOptions}</select></label>
-            <label><span>Payment Type</span><select name="payment_type"><option value="alipay">支付宝 / 易支付</option><option value="wxpay">微信 / 易支付</option><option value="alipay_direct">支付宝官方</option><option value="wxpay_direct">微信官方</option><option value="stripe">Stripe</option></select></label>
-          </div>
-          <div class="row">
-            <label><span>Amount</span><input name="amount" type="number" step="0.01" value="25" /></label>
-            <label><span>Preset</span><select name="preset"><option value="">只打开支付页</option><option value="success">打开后直接模拟成功</option><option value="fail">打开后直接模拟失败</option></select></label>
-          </div>
-          <label><span>说明</span><input name="notes" value="Launch from mock dashboard" /></label>
-          <button class="primary" type="submit">Open Payment Flow</button>
-        </form>
-      </section>
-      <section class="panel">
-        <h2>Create User</h2>
+        <h2>创建用户</h2>
         <form method="post" action="${escapeHtml(withAppCode('/mock-console/users', appCode))}">
           <div class="row">
-            <label><span>Username</span><input name="username" value="test-user" required /></label>
-            <label><span>Email</span><input name="email" value="test-user@example.com" required /></label>
+            <label><span>用户名</span><input name="username" value="test-user" required /></label>
+            <label><span>邮箱</span><input name="email" value="test-user@example.com" required /></label>
           </div>
           <div class="row">
-            <label><span>Balance</span><input name="balance" type="number" step="0.01" value="100" /></label>
-            <label><span>Role</span><select name="role"><option value="user">user</option><option value="admin">admin</option></select></label>
+            <label><span>余额</span><input name="balance" type="number" step="0.01" value="100" /></label>
+            <label><span>角色</span><select name="role"><option value="user">user</option><option value="admin">admin</option></select></label>
           </div>
-          <label><span>Notes</span><input name="notes" value="Created from mock console" /></label>
-          <button class="primary" type="submit">Create User</button>
-        </form>
-      </section>
-      <section class="panel">
-        <h2>Create App</h2>
-        <form method="post" action="/mock-console/apps">
-          <div class="row">
-            <label><span>App Name</span><input name="name" value="Demo Shop" required /></label>
-            <label><span>App Code</span><input name="code" value="${escapeHtml(makeAppCode('demo-shop'))}" /></label>
-          </div>
-          <label><span>Notes</span><input name="notes" value="Created from dashboard" /></label>
-          <button class="primary" type="submit">Create App</button>
-        </form>
-      </section>
-      <section class="panel">
-        <h2>Assign Subscription</h2>
-        <form method="post" action="${escapeHtml(withAppCode('/mock-console/subscriptions', appCode))}">
-          <div class="row">
-            <label><span>User</span><select name="user_id">${userOptions}</select></label>
-            <label><span>Group</span><select name="group_id">${groupOptions}</select></label>
-          </div>
-          <div class="row">
-            <label><span>Days</span><input name="validity_days" type="number" value="30" /></label>
-            <label><span>Notes</span><input name="notes" value="Manual assignment" /></label>
-          </div>
-          <button class="primary" type="submit">Assign</button>
+          <label><span>备注</span><input name="notes" value="通过 mock 控台创建" /></label>
+          <button class="primary" type="submit">创建用户</button>
         </form>
       </section>
     </div>
-    <section class="panel" id="users">
-      <h2>Users</h2>
-      <table><thead><tr><th>User</th><th>Email</th><th>Balance</th><th>Token</th><th>Actions</th></tr></thead><tbody>${renderUserRows(db, appCode)}</tbody></table>
-    </section>
-    <section class="panel" id="payments">
-      <h2>Payment Sessions</h2>
-      <table><thead><tr><th>Trade</th><th>Provider</th><th>Amount</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>${renderPaymentRows(db, appCode) || '<tr><td colspan="6" class="muted">No payment sessions yet for this app.</td></tr>'}</tbody></table>
-    </section>
     <section class="panel">
-      <h2>Apps</h2>
-      <table><thead><tr><th>Name</th><th>Code</th><th>Status</th><th>Created</th></tr></thead><tbody>${db.apps.map((app) => `<tr><td><strong>${escapeHtml(app.name)}</strong><div class="muted">${escapeHtml(app.notes || '')}</div></td><td><code>${escapeHtml(app.code)}</code></td><td><span class="tag ${app.code === appCode ? 'good' : ''}">${escapeHtml(app.status)}</span></td><td>${escapeHtml(app.created_at || '')}</td></tr>`).join('')}</tbody></table>
-    </section>
-    <section class="panel">
-      <h2>Subscriptions</h2>
-      <table><thead><tr><th>User</th><th>Group</th><th>Status</th><th>Expires At</th><th>Actions</th></tr></thead><tbody>${renderSubscriptionRows(db, appCode)}</tbody></table>
-    </section>
-    <section class="panel">
-      <h2>Groups</h2>
-      <table><thead><tr><th>Group</th><th>Type</th><th>Status</th><th>Rate</th><th>Limits D/W/M</th></tr></thead><tbody>${renderGroupRows(db)}</tbody></table>
+      <h2>应用列表</h2>
+      <table><thead><tr><th>名称</th><th>Code</th><th>状态</th><th>创建时间</th></tr></thead><tbody>${db.apps.map((app) => `<tr><td><strong>${escapeHtml(app.name)}</strong><div class="muted">${escapeHtml(app.notes || '')}</div></td><td><code>${escapeHtml(app.code)}</code></td><td><span class="tag ${app.code === appCode ? 'good' : ''}">${escapeHtml(app.status)}</span></td><td>${escapeHtml(app.created_at || '')}</td></tr>`).join('')}</tbody></table>
     </section>
   `;
-  return renderLayout('Mock Console', body, { appCode });
+  return renderLayout('Mock 控制台', body, { appCode });
 }
 
 function redirect(res, location = '/mock-console') {
@@ -1287,7 +1239,7 @@ function renderMockPayPage(session) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mock Pay</title>
+  <title>模拟支付页</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#0f172a; color:#e2e8f0; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; }
     .card { width:min(92vw, 520px); background:#111827; border:1px solid #334155; border-radius:24px; padding:28px; box-shadow:0 20px 40px rgba(0,0,0,.35); }
@@ -1309,9 +1261,9 @@ function renderMockPayPage(session) {
 </head>
 <body>
   <div class="card">
-    <span class="badge">Mock Payment Gateway · ${escapeHtml(statusText)}</span>
+    <span class="badge">模拟支付网关 · ${escapeHtml(statusText)}</span>
     <h1>模拟支付页面</h1>
-    <p>这个页面用于本地联调。你可以模拟支付成功、失败、取消、过期，成功/失败会尝试向主应用发送 EasyPay notify。</p>
+    <p>这个页面用于本地联调。你可以模拟支付成功、失败、取消、过期；成功或失败后会尝试通知主应用。</p>
     <div class="meta">
       <div>订单号: ${session.out_trade_no}</div>
       <div>网关流水: ${session.trade_no}</div>
@@ -1337,65 +1289,21 @@ function renderMockPayPage(session) {
 function renderProviderConsolePage(db, provider, appCode, notice = '') {
   const currentApp = getAppByCode(db, appCode);
   const providerTitle = providerLabel(provider);
-  const sessionsTable = renderProviderSessions(db, provider, appCode);
   const providerConfig = getAppProviderConfig(db, appCode, provider);
-  const typeOptions =
-    provider === 'alipay'
-      ? '<option value="alipay_direct">alipay_direct</option>'
-      : provider === 'wxpay'
-        ? '<option value="wxpay_direct">wxpay_direct</option>'
-        : '<option value="stripe">stripe</option>';
 
   const body = `
     ${notice ? `<div class="panel"><strong>${escapeHtml(notice)}</strong></div>` : ''}
     <section class="panel">
-      <h2>${escapeHtml(providerTitle)} Control</h2>
-      <div class="muted">Current app: <strong>${escapeHtml(currentApp?.name || DEFAULT_APP_NAME)}</strong> · code: <code>${escapeHtml(appCode)}</code></div>
+      <h2>${escapeHtml(providerTitle)} 控制台</h2>
+      <div class="muted">当前应用: <strong>${escapeHtml(currentApp?.name || DEFAULT_APP_NAME)}</strong> · code: <code>${escapeHtml(appCode)}</code></div>
     </section>
     <div class="grid">
       <section class="panel">
-        <h2>Mock Provider Config</h2>
+        <h2>Mock 渠道配置</h2>
         <div class="muted" style="margin-bottom:12px;">这些配置会用于 mock 上游网关的签名、通知和查询响应。</div>
         ${renderProviderConfigForm(provider, appCode, providerConfig)}
       </section>
-      <section class="panel">
-        <h2>Create Mock Session</h2>
-        <form method="post" action="${escapeHtml(withAppCode(`/mock-console/providers/${provider}/sessions`, appCode))}">
-          <div class="row">
-            <label><span>Order ID</span><input name="out_trade_no" value="manual-${provider}-${Date.now()}" required /></label>
-            <label><span>Type</span><select name="type">${typeOptions}</select></label>
-          </div>
-          <div class="row">
-            <label><span>Amount</span><input name="money" type="number" step="0.01" value="12.34" required /></label>
-            <label><span>Notify URL</span><input name="notify_url" value="" placeholder="https://host/api/notify" /></label>
-          </div>
-          <div class="row">
-            <label><span>App Code</span><input name="app_code" value="${escapeHtml(appCode)}" required /></label>
-            <label><span>Name</span><input name="name" value="${escapeHtml(providerTitle)} Demo" /></label>
-          </div>
-          <button class="primary" type="submit">Create Session</button>
-        </form>
-      </section>
-      <section class="panel">
-        <h2>Quick Links</h2>
-        <div class="actions">
-          <a class="button" href="${escapeHtml(withAppCode('/mock-console', appCode))}">Back Dashboard</a>
-          <a class="button" href="${escapeHtml(buildMainAdminUrl(appCode))}" target="_blank">Open Main Admin</a>
-          <a class="button primary" href="${escapeHtml(buildMainPayUrl('mock-user-token', appCode))}" target="_blank">Open Main Pay</a>
-          ${
-            provider === 'alipay'
-              ? `<a class="button" href="${escapeHtml(`${APP_URL}/mock-api/alipay/gateway.do`)}" target="_blank">Gateway Base</a>`
-              : provider === 'wxpay'
-                ? `<a class="button" href="${escapeHtml(`${APP_URL}/v3/pay/transactions/native`)}" target="_blank">API Base</a>`
-                : `<a class="button" href="${escapeHtml(`${APP_URL}/v1/payment_intents`)}" target="_blank">API Base</a>`
-          }
-        </div>
-      </section>
     </div>
-    <section class="panel">
-      <h2>${escapeHtml(providerTitle)} Sessions</h2>
-      <table><thead><tr><th>Trade</th><th>Type</th><th>Amount</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>${sessionsTable || '<tr><td colspan="6" class="muted">No sessions yet.</td></tr>'}</tbody></table>
-    </section>
   `;
 
   return renderLayout(`${providerTitle} Mock`, body, { appCode });
@@ -1414,6 +1322,25 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/mock-console') {
     const notice = url.searchParams.get('notice') || '';
     return sendHtml(res, 200, renderConsolePage(db, appCode, notice));
+  }
+
+  if (req.method === 'GET' && pathname === '/mock-console/open-payment') {
+    const lookupAppCode = getActiveAppCode(url, db);
+    const orderId = (url.searchParams.get('order_id') || '').trim();
+    if (!orderId) {
+      return redirect(
+        res,
+        withAppCode(`/mock-console?notice=${encodeURIComponent('请输入订单号后再打开模拟支付页')}`, lookupAppCode),
+      );
+    }
+    const session = findSessionByOrderId(db, lookupAppCode, orderId);
+    if (!session) {
+      return redirect(
+        res,
+        withAppCode(`/mock-console?notice=${encodeURIComponent(`未找到订单 ${orderId} 对应的模拟支付页`)}`, lookupAppCode),
+      );
+    }
+    return redirect(res, `/mock-pay/${encodeURIComponent(session.trade_no)}`);
   }
 
   const providerMatch = pathname.match(/^\/mock-console\/providers\/(alipay|wxpay|stripe)$/);
@@ -1437,13 +1364,13 @@ const server = http.createServer(async (req, res) => {
       email,
       status: 'active',
       balance: Number((Number.isFinite(balance) ? balance : 0).toFixed(2)),
-      notes: formValue(body, 'notes', 'Created from mock console'),
+      notes: formValue(body, 'notes', '通过 mock 控台创建'),
       role: formValue(body, 'role', 'user'),
       token: makeToken(username),
     };
     db.users.push(user);
     writeDb(db);
-    return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`Created user ${user.username}`)}`, appCode));
+    return redirect(res, withAppCode(`/mock-console?notice=${encodeURIComponent(`已创建用户 ${user.username}`)}`, appCode));
   }
 
   if (req.method === 'POST' && pathname === '/mock-console/apps') {
@@ -1610,12 +1537,24 @@ const server = http.createServer(async (req, res) => {
       appCode: appCode,
       config: getAppProviderConfig(db, appCode, 'alipay'),
     };
+    let sessionAppCode = appEntry.appCode || appCode;
+    if (params.return_url) {
+      try {
+        const parsedReturnUrl = new URL(params.return_url);
+        sessionAppCode = parsedReturnUrl.searchParams.get('app_code') || sessionAppCode;
+      } catch {
+        /* ignore */
+      }
+    }
+    sessionAppCode = ensureMockApp(db, sessionAppCode);
     const providerConfig = appEntry.config || {};
     const privateKey = providerConfig.privateKey || '';
     if (!method) return badRequest(res, 'Alipay mock requires method');
 
     if (method === 'alipay.trade.page.pay' || method === 'alipay.trade.wap.pay') {
       const bizContent = params.biz_content ? JSON.parse(params.biz_content) : {};
+      const mockGatewayPrivateKey = params.mock_gateway_private_key || providerConfig.privateKey || '';
+      const mockGatewaySellerId = params.mock_gateway_seller_id || providerConfig.sellerId || 'mock-seller';
       const session = upsertPaymentSession(db, {
         provider: 'alipay',
         type: 'alipay_direct',
@@ -1625,9 +1564,10 @@ const server = http.createServer(async (req, res) => {
         name: bizContent.subject || 'Alipay Mock Payment',
         notify_url: params.notify_url || '',
         return_url: params.return_url || '',
-        app_code: appEntry.appCode || appCode,
+        app_code: sessionAppCode,
         gateway_app_id: appId,
-        gateway_merchant_id: providerConfig.sellerId || 'mock-seller',
+        gateway_merchant_id: mockGatewaySellerId,
+        gateway_private_key: mockGatewayPrivateKey,
       });
       writeDb(db);
       return redirect(res, `/mock-pay/${encodeURIComponent(session.trade_no)}`);

@@ -32,6 +32,30 @@ function isVisibleOrderOutcome(data: PublicOrderStatusSnapshot): boolean {
   return data.paymentSuccess || TERMINAL_STATUSES.has(data.status);
 }
 
+function isMockHostedPaymentUrl(payUrl?: string | null): boolean {
+  if (!payUrl) return false;
+  try {
+    const url = new URL(payUrl);
+    return ['localhost', '127.0.0.1'].includes(url.hostname) && url.pathname.startsWith('/mock-pay/');
+  } catch {
+    return false;
+  }
+}
+
+function buildMockConsoleUrl(payUrl: string, orderId: string, appCode?: string): string | null {
+  try {
+    const url = new URL('/mock-console', payUrl);
+    url.searchParams.set('order_id', orderId);
+    if (appCode) {
+      url.searchParams.set('app_code', appCode);
+    }
+    url.hash = 'payments';
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export default function PaymentQRCode({
   orderId,
   token,
@@ -65,6 +89,7 @@ export default function PaymentQRCode({
   const [stripeSubmitting, setStripeSubmitting] = useState(false);
   const [stripeError, setStripeError] = useState('');
   const [stripeSuccess, setStripeSuccess] = useState(false);
+  const [currentAppCode, setCurrentAppCode] = useState('');
   const [stripeLib, setStripeLib] = useState<{
     stripe: import('@stripe/stripe-js').Stripe;
     elements: import('@stripe/stripe-js').StripeElements;
@@ -121,20 +146,50 @@ export default function PaymentQRCode({
       locale === 'en'
         ? 'This Stripe flow is provided by a mock hosted payment page for local integration testing.'
         : '当前 Stripe 流程使用本地 mock 托管支付页，适合联调测试。',
+    orderId: locale === 'en' ? 'Order ID' : '订单号',
+    mockFlowTitle: locale === 'en' ? 'Mock payment testing flow' : 'Mock 支付联调流程',
+    mockFlowHint:
+      locale === 'en'
+        ? 'Keep this page open, then open the mock console and search this order ID to find the payment session.'
+        : '请保留当前页面，然后打开 Mock 控台，按这个订单号查找对应支付会话。',
+    mockFlowHint2:
+      locale === 'en'
+        ? 'After opening the session, complete success or failure in the simulated gateway page.'
+        : '进入会话后，再在模拟支付页里执行成功、失败等操作。',
+    openMockConsole: locale === 'en' ? 'Open Mock Console' : '打开 Mock 控台',
+    mockOnlyKeepPage:
+      locale === 'en'
+        ? 'For local mock testing, this page will stay here instead of redirecting automatically.'
+        : '当前是本地 mock 联调，主站会停留在此页，不会自动跳到模拟网关。',
   };
 
   const isHostedStripeFlow = isStripeType(paymentType) && !!payUrl && !clientSecret;
-  const shouldAutoRedirect = !expired && (!!payUrl && ((isStripeType(paymentType) && isHostedStripeFlow) || (!isStripeType(paymentType) && (isMobile || !qrCode))));
+  const isMockHostedPayment = isMockHostedPaymentUrl(payUrl);
+  const mockConsoleUrl = useMemo(() => {
+    if (!payUrl || !isMockHostedPayment) return null;
+    return buildMockConsoleUrl(payUrl, orderId, currentAppCode || undefined);
+  }, [currentAppCode, isMockHostedPayment, orderId, payUrl]);
+  const shouldAutoRedirect =
+    !expired &&
+    !isMockHostedPayment &&
+    !!payUrl &&
+    ((isStripeType(paymentType) && isHostedStripeFlow) || (!isStripeType(paymentType) && (isMobile || !qrCode)));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nextAppCode = new URLSearchParams(window.location.search).get('app_code') || '';
+    setCurrentAppCode(nextAppCode);
+  }, []);
 
   useEffect(() => {
     if (!shouldAutoRedirect || redirected) return;
     setRedirected(true);
-    if (isEmbedded) {
+    if (isHostedStripeFlow || isEmbedded) {
       window.open(payUrl!, '_blank');
     } else {
       window.location.replace(payUrl!);
     }
-  }, [shouldAutoRedirect, redirected, payUrl, isEmbedded]);
+  }, [shouldAutoRedirect, redirected, payUrl, isEmbedded, isHostedStripeFlow]);
 
   const qrPayload = useMemo(() => {
     return (qrCode || '').trim();
@@ -434,12 +489,59 @@ export default function PaymentQRCode({
         </div>
       </div>
 
+      <div
+        className={[
+          'w-full rounded-lg border px-4 py-3 text-center',
+          dark ? 'border-slate-700 bg-slate-900' : 'border-gray-200 bg-white',
+        ].join(' ')}
+      >
+        <div className={['text-xs uppercase tracking-[0.2em]', dark ? 'text-slate-500' : 'text-gray-400'].join(' ')}>
+          {t.orderId}
+        </div>
+        <div className={['mt-2 break-all font-mono text-sm font-semibold', dark ? 'text-slate-100' : 'text-gray-900'].join(' ')}>
+          {orderId}
+        </div>
+      </div>
+
+      {isMockHostedPayment && (
+        <div
+          className={[
+            'w-full rounded-lg border px-4 py-4',
+            dark ? 'border-amber-700/60 bg-amber-900/20 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-900',
+          ].join(' ')}
+        >
+          <div className="text-sm font-semibold">{t.mockFlowTitle}</div>
+          <p className={['mt-2 text-sm leading-6', dark ? 'text-amber-100/90' : 'text-amber-900'].join(' ')}>
+            {t.mockOnlyKeepPage}
+          </p>
+          <p className={['mt-1 text-sm leading-6', dark ? 'text-amber-100/90' : 'text-amber-900'].join(' ')}>
+            {t.mockFlowHint}
+          </p>
+          <p className={['mt-1 text-sm leading-6', dark ? 'text-amber-100/90' : 'text-amber-900'].join(' ')}>
+            {t.mockFlowHint2}
+          </p>
+          {mockConsoleUrl && (
+            <a
+              href={mockConsoleUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={[
+                'mt-4 inline-flex w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-medium shadow-sm',
+                dark ? 'bg-amber-300 text-slate-900 hover:bg-amber-200' : 'bg-amber-500 text-white hover:bg-amber-600',
+              ].join(' ')}
+            >
+              {t.openMockConsole}
+            </a>
+          )}
+        </div>
+      )}
+
       {!expired && (
         <>
           {isStripe ? (
             <div className="w-full max-w-md space-y-4">
               {isHostedStripeFlow ? (
-                <>
+                isMockHostedPayment ? (
                   <div
                     className={[
                       'rounded-lg border p-5 text-center',
@@ -447,21 +549,34 @@ export default function PaymentQRCode({
                     ].join(' ')}
                   >
                     <p className={['text-sm', dark ? 'text-slate-300' : 'text-gray-700'].join(' ')}>
-                      {t.hostedStripeHint}
+                      {t.mockFlowHint}
                     </p>
                   </div>
-                  <a
-                    href={payUrl!}
-                    target={isEmbedded ? '_blank' : '_self'}
-                    rel="noopener noreferrer"
-                    className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 font-medium text-white shadow-md ${meta.buttonClass}`}
-                  >
-                    {iconSrc && <img src={iconSrc} alt={channelLabel} className="h-5 w-5 brightness-0 invert" />}
-                    {redirected
-                      ? `${t.notRedirectedPrefix}${channelLabel}`
-                      : `${t.gotoPrefix}${channelLabel}${t.gotoSuffix}`}
-                  </a>
-                </>
+                ) : (
+                  <>
+                    <div
+                      className={[
+                        'rounded-lg border p-5 text-center',
+                        dark ? 'border-slate-700 bg-slate-900' : 'border-gray-200 bg-white',
+                      ].join(' ')}
+                    >
+                      <p className={['text-sm', dark ? 'text-slate-300' : 'text-gray-700'].join(' ')}>
+                        {t.hostedStripeHint}
+                      </p>
+                    </div>
+                    <a
+                      href={payUrl!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 font-medium text-white shadow-md ${meta.buttonClass}`}
+                    >
+                      {iconSrc && <img src={iconSrc} alt={channelLabel} className="h-5 w-5 brightness-0 invert" />}
+                      {redirected
+                        ? `${t.notRedirectedPrefix}${channelLabel}`
+                        : `${t.gotoPrefix}${channelLabel}${t.gotoSuffix}`}
+                    </a>
+                  </>
+                )
               ) : !clientSecret || !stripePublishableKey ? (
                 <div
                   className={[

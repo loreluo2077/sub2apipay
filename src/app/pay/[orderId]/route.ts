@@ -5,8 +5,8 @@ import { getEnv } from '@/lib/config';
 import { buildAlipayPaymentUrl } from '@/lib/alipay/provider';
 import { deriveOrderState, getOrderDisplayState, type OrderStatusLike } from '@/lib/order/status';
 import { buildOrderResultUrl } from '@/lib/order/status-access';
-import { getSystemConfigs } from '@/lib/system-config';
 import { getInstanceConfig } from '@/lib/payment/load-balancer';
+import { getAppConfigValues } from '@/lib/app-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -254,6 +254,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { id: orderId },
     select: {
       id: true,
+      appId: true,
       app: { select: { code: true } },
       amount: true,
       payAmount: true,
@@ -300,9 +301,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (order.orderType === 'subscription' && order.plan) {
     subject = order.plan.productName || `Sub2API 订阅 ${order.plan.name}`;
   } else {
-    const nameConfigs = await getSystemConfigs(['PRODUCT_NAME_PREFIX', 'PRODUCT_NAME_SUFFIX']);
-    const prefix = nameConfigs['PRODUCT_NAME_PREFIX']?.trim();
-    const suffix = nameConfigs['PRODUCT_NAME_SUFFIX']?.trim();
+    const appConfig = await getAppConfigValues(order.appId);
+    const prefix = appConfig.PRODUCT_NAME_PREFIX?.trim();
+    const suffix = appConfig.PRODUCT_NAME_SUFFIX?.trim();
     if (prefix || suffix) {
       subject = `${prefix || ''} ${payAmount.toFixed(2)} ${suffix || ''}`.trim();
     } else {

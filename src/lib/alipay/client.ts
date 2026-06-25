@@ -79,7 +79,12 @@ function resolveGatewayBase(config: ResolvedAlipayConfig): string {
  */
 export function pageExecute(
   bizContent: Record<string, unknown>,
-  options?: { notifyUrl?: string; returnUrl?: string | null; method?: string },
+  options?: {
+    notifyUrl?: string;
+    returnUrl?: string | null;
+    method?: string;
+    extraParams?: Record<string, string | undefined>;
+  },
   instanceConfig?: Record<string, string>,
 ): string {
   const config = resolveAlipayConfig(['appId', 'privateKey', 'publicKey'], instanceConfig);
@@ -96,6 +101,13 @@ export function pageExecute(
   }
   if (options?.returnUrl !== null && (options?.returnUrl || config.returnUrl)) {
     params.return_url = (options?.returnUrl || config.returnUrl)!;
+  }
+  if (options?.extraParams) {
+    for (const [key, value] of Object.entries(options.extraParams)) {
+      if (value) {
+        params[key] = value;
+      }
+    }
   }
 
   params.sign = generateSign(params, config.privateKey);

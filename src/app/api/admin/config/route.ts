@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { getAllSystemConfigs, setSystemConfigs, getSystemConfig } from '@/lib/system-config';
 import { prisma } from '@/lib/db';
+import { getAppConfigValues, setAppConfigValues, APP_CONFIG_KEYS } from '@/lib/app-config';
+import { resolveAppByCode } from '@/lib/app-context';
 
 const SENSITIVE_PATTERNS = ['KEY', 'SECRET', 'PASSWORD', 'PRIVATE'];
 const MASK_RE = /\*{4,}/;
@@ -62,13 +64,28 @@ export async function GET(request: NextRequest) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
 
   try {
-    const configs = await getAllSystemConfigs();
-    const masked = configs.map((config) => ({
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
+    const [appConfigs, sharedConfigs] = await Promise.all([
+      getAppConfigValues(app.id),
+      getAllSystemConfigs(),
+    ]);
+    const appConfigRows = APP_CONFIG_KEYS.map((key) => ({
+      key,
+      value: appConfigs[key],
+      group: 'payment',
+      label: key,
+    }));
+    const sharedRows = sharedConfigs.filter((config) => !APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
+    const masked = [...appConfigRows, ...sharedRows].map((config) => ({
       ...config,
       value: maskSensitiveValue(config.key, config.value),
     }));
     return NextResponse.json({ configs: masked });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to get system configs:', error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: '获取系统配置失败' }, { status: 500 });
   }
@@ -100,6 +117,8 @@ export async function PUT(request: NextRequest) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
 
   try {
+    const appCode = request.nextUrl.searchParams.get('app_code');
+    const app = await resolveAppByCode(appCode);
     const body = await request.json();
     const { configs } = body;
 
@@ -116,7 +135,10 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const blocked = await validateEnabledProviders(configs);
+    const appScopedConfigs = configs.filter((config: { key: string }) => APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
+    const sharedConfigs = configs.filter((config: { key: string }) => !APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
+
+    const blocked = await validateEnabledProviders(appScopedConfigs);
     if (blocked) return blocked;
 
     // Skip masked sensitive values (user didn't change them)
@@ -124,18 +146,32 @@ export async function PUT(request: NextRequest) {
       (c: { key: string; value: string }) =>
         !(SENSITIVE_PATTERNS.some((p) => c.key.toUpperCase().includes(p)) && MASK_RE.test(c.value)),
     );
+    const filteredAppConfigs = filteredConfigs.filter((config: { key: string }) => APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
+    const filteredSharedConfigs = filteredConfigs.filter((config: { key: string }) => !APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
 
-    await setSystemConfigs(
-      filteredConfigs.map((c: { key: string; value: string; group?: string; label?: string }) => ({
-        key: c.key,
-        value: c.value,
-        group: c.group,
-        label: c.label,
-      })),
-    );
+    if (filteredAppConfigs.length > 0) {
+      await setAppConfigValues(
+        app.id,
+        Object.fromEntries(filteredAppConfigs.map((config: { key: string; value: string }) => [config.key, config.value])),
+      );
+    }
+
+    if (filteredSharedConfigs.length > 0) {
+      await setSystemConfigs(
+        filteredSharedConfigs.map((c: { key: string; value: string; group?: string; label?: string }) => ({
+          key: c.key,
+          value: c.value,
+          group: c.group,
+          label: c.label,
+        })),
+      );
+    }
 
     return NextResponse.json({ success: true, updated: configs.length });
   } catch (error) {
+    if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
+      return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
+    }
     console.error('Failed to update system configs:', error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: '更新系统配置失败' }, { status: 500 });
   }

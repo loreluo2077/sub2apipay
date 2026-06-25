@@ -18,9 +18,35 @@ model App {
   channels                 Channel[]
   subscriptionPlans        SubscriptionPlan[]
   paymentProviderInstances PaymentProviderInstance[]
+  config                   AppConfig?
 
   @@index([status])
   @@map("apps")
+}
+
+model AppConfig {
+  appId                       String   @id @map("app_id")
+  app                         App      @relation(fields: [appId], references: [id])
+  enabledPaymentTypes         String   @default("") @map("enabled_payment_types")
+  enabledProviders            String   @default("") @map("enabled_providers")
+  productNamePrefix           String   @default("") @map("product_name_prefix")
+  productNameSuffix           String   @default("") @map("product_name_suffix")
+  balancePaymentDisabled      Boolean  @default(false) @map("balance_payment_disabled")
+  cancelRateLimitEnabled      Boolean  @default(false) @map("cancel_rate_limit_enabled")
+  cancelRateLimitWindow       Int      @default(1) @map("cancel_rate_limit_window")
+  cancelRateLimitUnit         String   @default("day") @map("cancel_rate_limit_unit")
+  cancelRateLimitMax          Int      @default(10) @map("cancel_rate_limit_max")
+  cancelRateLimitWindowMode   String   @default("rolling") @map("cancel_rate_limit_window_mode")
+  maxPendingOrders            Int      @default(3) @map("max_pending_orders")
+  rechargeMinAmount           Decimal? @db.Decimal(10, 2) @map("recharge_min_amount")
+  rechargeMaxAmount           Decimal? @db.Decimal(10, 2) @map("recharge_max_amount")
+  dailyRechargeLimit          Decimal? @db.Decimal(10, 2) @map("daily_recharge_limit")
+  orderTimeoutMinutes         Int?     @map("order_timeout_minutes")
+  loadBalanceStrategy         String   @default("round-robin") @map("load_balance_strategy")
+  defaultDeductBalance        Boolean  @default(true) @map("default_deduct_balance")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  @@map("app_configs")
 }
 
 model Order {

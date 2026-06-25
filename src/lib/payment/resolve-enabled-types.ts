@@ -1,4 +1,4 @@
-import { getSystemConfig } from '@/lib/system-config';
+import { getAppConfigValue } from '@/lib/app-config';
 import { ensureDBProviders, paymentRegistry } from '@/lib/payment';
 
 /**
@@ -22,9 +22,9 @@ export function resolveEnabledPaymentTypes(supportedTypes: string[], configuredT
 /**
  * 获取当前启用的支付类型（结合 registry 支持类型 + 数据库 ENABLED_PAYMENT_TYPES 配置）。
  */
-export async function getEnabledPaymentTypes(): Promise<string[]> {
+export async function getEnabledPaymentTypes(appId: string): Promise<string[]> {
   await ensureDBProviders();
   const supportedTypes = paymentRegistry.getSupportedTypes();
-  const configuredTypes = await getSystemConfig('ENABLED_PAYMENT_TYPES');
+  const configuredTypes = await getAppConfigValue(appId, 'ENABLED_PAYMENT_TYPES');
   return resolveEnabledPaymentTypes(supportedTypes, configuredTypes);
 }

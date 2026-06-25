@@ -21,6 +21,38 @@ export interface BuildAlipayPaymentUrlInput {
   notifyUrl?: string;
   returnUrl?: string | null;
   isMobile?: boolean;
+  mockGatewaySellerId?: string;
+  mockGatewayPrivateKey?: string;
+}
+
+function isHostedMockMode(instanceConfig?: Record<string, string>): boolean {
+  const gatewayBase = instanceConfig?.gatewayBase?.trim();
+  return Boolean(gatewayBase && /localhost:3001|127\.0\.0\.1:3001|mock-sub2api/i.test(gatewayBase));
+}
+
+async function createHostedMockPayment(
+  input: BuildAlipayPaymentUrlInput,
+  instanceConfig?: Record<string, string>,
+): Promise<CreatePaymentResponse> {
+  const gatewayUrl = buildAlipayPaymentUrl(input, instanceConfig);
+  const response = await fetch(gatewayUrl, {
+    method: 'GET',
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  const location = response.headers.get('location');
+  if (!location) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Alipay mock hosted create failed: ${response.status} ${body}`);
+  }
+
+  const payUrl = new URL(location, gatewayUrl).toString();
+  return {
+    tradeNo: input.orderId,
+    payUrl,
+    qrCode: payUrl,
+  };
 }
 
 function isTradeNotExistError(error: unknown): boolean {
@@ -51,6 +83,10 @@ export function buildAlipayPaymentUrl(input: BuildAlipayPaymentUrlInput, instanc
       notifyUrl: input.notifyUrl,
       returnUrl: input.returnUrl,
       method,
+      extraParams: {
+        mock_gateway_seller_id: input.mockGatewaySellerId,
+        mock_gateway_private_key: input.mockGatewayPrivateKey,
+      },
     },
     instanceConfig,
   );
@@ -78,6 +114,22 @@ export class AlipayProvider implements PaymentProvider {
   }
 
   async createPayment(request: CreatePaymentRequest): Promise<CreatePaymentResponse> {
+    if (isHostedMockMode(this.instanceConfig)) {
+      return createHostedMockPayment(
+        {
+          orderId: request.orderId,
+          amount: request.amount,
+          subject: request.subject,
+          notifyUrl: request.notifyUrl,
+          returnUrl: request.returnUrl,
+          isMobile: request.isMobile,
+          mockGatewaySellerId: this.instanceConfig?.sellerId,
+          mockGatewayPrivateKey: this.instanceConfig?.privateKey,
+        },
+        this.instanceConfig,
+      );
+    }
+
     if (!request.isMobile) {
       const entryUrl = buildAlipayEntryUrl(request.orderId);
       return {
