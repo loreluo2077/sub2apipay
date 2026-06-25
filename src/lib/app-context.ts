@@ -45,3 +45,25 @@ export async function resolveAppByCode(appCode?: string | null): Promise<Resolve
 
   return app;
 }
+
+/**
+ * 与 resolveAppByCode 相同，但不校验 status，供后台管理接口使用。
+ * inactive 的 app 在管理后台仍可查看和编辑。
+ *
+ * @author Alfie
+ */
+export async function resolveAppByCodeForAdmin(appCode?: string | null): Promise<ResolvedApp> {
+  const normalized = appCode?.trim();
+  if (!normalized) return getDefaultApp();
+
+  const app = await prisma.app.findUnique({
+    where: { code: normalized },
+    select: { id: true, code: true, name: true, status: true },
+  });
+
+  if (!app) {
+    throw new Error('APP_NOT_FOUND');
+  }
+
+  return app;
+}

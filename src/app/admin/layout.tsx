@@ -88,30 +88,6 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div data-theme={theme} className={['min-h-screen', isDark ? 'bg-slate-950' : 'bg-slate-100'].join(' ')}>
       <div className="px-2 pt-2 sm:px-3 sm:pt-3">
-        <div
-          className={[
-            'mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2',
-            isDark ? 'border-slate-700 bg-slate-800/70' : 'border-slate-200 bg-white/90',
-          ].join(' ')}
-        >
-          <div className={['text-xs font-medium', isDark ? 'text-slate-400' : 'text-slate-500'].join(' ')}>
-            {locale === 'en' ? 'Current App' : '当前业务应用'}
-          </div>
-          <select
-            value={currentAppCode}
-            onChange={(e) => handleAppChange(e.target.value)}
-            className={[
-              'min-w-[220px] rounded-lg border px-3 py-1.5 text-sm',
-              isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-300 bg-white text-slate-900',
-            ].join(' ')}
-          >
-            {apps.map((app) => (
-              <option key={app.id} value={app.code}>
-                {app.name} ({app.code})
-              </option>
-            ))}
-          </select>
-        </div>
         <nav
           className={[
             'mb-1 flex flex-wrap gap-1 rounded-xl border p-1',

@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { getGroup } from '@/lib/sub2api/client';
-import { resolveAppByCode } from '@/lib/app-context';
+import { resolveAppByCodeForAdmin } from '@/lib/app-context';
 
 export async function GET(request: NextRequest) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
 
   try {
     const appCode = request.nextUrl.searchParams.get('app_code');
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
     const channels = await prisma.channel.findMany({
       where: { appId: app.id },
       orderBy: { sortOrder: 'asc' },
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证 group_id 唯一性（仅在提供了 group_id 时）
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
 
     if (group_id) {
       const existing = await prisma.channel.findFirst({

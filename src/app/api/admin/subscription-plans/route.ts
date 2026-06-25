@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { getGroup } from '@/lib/sub2api/client';
-import { resolveAppByCode } from '@/lib/app-context';
+import { resolveAppByCodeForAdmin } from '@/lib/app-context';
 
 export async function GET(request: NextRequest) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
 
   try {
     const appCode = request.nextUrl.searchParams.get('app_code');
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
     const plans = await prisma.subscriptionPlan.findMany({
       where: { appId: app.id },
       orderBy: { sortOrder: 'asc' },
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'sort_order 必须是非负整数' }, { status: 400 });
     }
 
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
     const plan = await prisma.subscriptionPlan.create({
       data: {
         appId: app.id,

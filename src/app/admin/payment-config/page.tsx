@@ -940,22 +940,6 @@ function PaymentConfigContent() {
       locale={locale}
       actions={
         <>
-          <a
-            href={mainPayUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={`inline-flex items-center rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-          >
-            {locale === 'en' ? 'Open Pay Page' : '打开前台支付页'}
-          </a>
-          <a
-            href={mockConsoleUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={`inline-flex items-center rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-          >
-            {locale === 'en' ? 'Open Mock Console' : '打开 Mock 控台'}
-          </a>
           <button
             type="button"
             onClick={saveConfig}
@@ -982,6 +966,35 @@ function PaymentConfigContent() {
         <section className={cardCls}>
           <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
             <div className={subCardCls}>
+              {apps.length > 1 && (
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {locale === 'en' ? 'Switch App' : '切换业务应用'}
+                  </span>
+                  <select
+                    value={appCode || currentApp?.code || ''}
+                    onChange={(e) => {
+                      const params = new URLSearchParams();
+                      if (token) params.set('token', token);
+                      params.set('theme', theme);
+                      params.set('ui_mode', uiMode);
+                      params.set('app_code', e.target.value);
+                      if (locale !== 'zh') params.set('lang', locale);
+                      window.location.href = `/admin/payment-config?${params.toString()}`;
+                    }}
+                    className={[
+                      'rounded-lg border px-3 py-1.5 text-sm',
+                      isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-300 bg-white text-slate-900',
+                    ].join(' ')}
+                  >
+                    {apps.map((app) => (
+                      <option key={app.id} value={app.code}>
+                        {app.name} ({app.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <span className={badgeCls('good')}>{locale === 'en' ? 'Current App' : '当前 App'}</span>
                 <span className={badgeCls(currentApp?.status === 'active' ? 'good' : 'warn')}>
@@ -1354,33 +1367,6 @@ function PaymentConfigContent() {
                 </div>
               </div>
 
-              <div className={subCardCls}>
-                <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-                  {locale === 'en' ? 'Testing Shortcuts' : '联调快捷入口'}
-                </h2>
-                <p className={sectionHintCls}>
-                  {locale === 'en'
-                    ? 'Use these links to verify the full payment flow without leaving the current app context.'
-                    : '这些入口会自动带上当前 App 上下文，方便你自己重复跑完整支付链路。'}
-                </p>
-                <div className="mt-4 grid gap-2">
-                  <a href={mockConsoleUrl} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
-                    {locale === 'en' ? 'Mock Dashboard' : 'Mock 总控台'}
-                  </a>
-                  <a href={`${MOCK_CONSOLE_BASE_URL}/mock-console/providers/alipay${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
-                    Alipay Mock
-                  </a>
-                  <a href={`${MOCK_CONSOLE_BASE_URL}/mock-console/providers/wxpay${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
-                    WeChat Mock
-                  </a>
-                  <a href={`${MOCK_CONSOLE_BASE_URL}/mock-console/providers/stripe${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
-                    Stripe Mock
-                  </a>
-                  <a href={mainPayUrl} target="_blank" rel="noreferrer" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
-                    {locale === 'en' ? 'Main Pay Page (mock user)' : '主前台支付页（mock 用户）'}
-                  </a>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -1432,22 +1418,6 @@ function PaymentConfigContent() {
                         .map((type) => PAYMENT_TYPE_LABELS[type]?.[locale] || type)
                         .join(' / ') || t.instancesEmptyHint}
                     </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <a
-                      href={`${MOCK_CONSOLE_BASE_URL}/mock-console${providerKey === 'easypay' ? '' : `/providers/${providerKey}`}${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={`rounded-xl px-3 py-2 text-xs font-medium ${isDark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
-                    >
-                      {providerKey === 'easypay'
-                        ? locale === 'en'
-                          ? 'Open Mock Dashboard'
-                          : '打开 Mock 总控台'
-                        : locale === 'en'
-                          ? 'Open Provider Mock'
-                          : '打开渠道 Mock'}
-                    </a>
                   </div>
                 </div>
 
@@ -1547,22 +1517,6 @@ function PaymentConfigContent() {
                                     ? 'Turn Refund On'
                                     : '开启退款'}
                               </button>
-                              <a
-                                href={`${MOCK_CONSOLE_BASE_URL}/mock-console${inst.providerKey === 'easypay' ? '' : `/providers/${inst.providerKey}`}${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`rounded-xl px-3 py-2 text-center text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                              >
-                                {locale === 'en' ? 'Open Mock Control' : '打开 Mock 控制台'}
-                              </a>
-                              <a
-                                href={mainPayUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`rounded-xl px-3 py-2 text-center text-xs font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                              >
-                                {locale === 'en' ? 'Open Frontend Flow' : '打开前台流程'}
-                              </a>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteInstance(inst.id)}
@@ -1874,7 +1828,7 @@ function PaymentConfigContent() {
                         />
                       ) : (
                         <input
-                          type={field.sensitive ? 'password' : 'text'}
+                          type="text"
                           value={instanceForm.config[field.key] ?? ''}
                           onChange={(e) =>
                             setInstanceForm({

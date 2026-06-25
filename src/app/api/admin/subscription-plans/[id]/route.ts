@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
 import { getGroup } from '@/lib/sub2api/client';
-import { resolveAppByCode } from '@/lib/app-context';
+import { resolveAppByCodeForAdmin } from '@/lib/app-context';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifyAdminToken(request))) return unauthorizedResponse(request);
@@ -12,7 +12,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const appCode = request.nextUrl.searchParams.get('app_code');
     const body = await request.json();
 
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
     const existing = await prisma.subscriptionPlan.findFirst({ where: { id, appId: app.id } });
     if (!existing) {
       return NextResponse.json({ error: '订阅套餐不存在' }, { status: 404 });
@@ -113,7 +113,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const { id } = await params;
     const appCode = request.nextUrl.searchParams.get('app_code');
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
 
     const existing = await prisma.subscriptionPlan.findFirst({ where: { id, appId: app.id } });
     if (!existing) {

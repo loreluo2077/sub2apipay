@@ -208,6 +208,7 @@ function ChannelsContent() {
   const isEmbedded = uiMode === 'embedded';
   const t = getTexts(locale);
 
+  const [apps, setApps] = useState<{ id: string; code: string; name: string }[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -226,6 +227,20 @@ function ChannelsContent() {
   const [syncImporting, setSyncImporting] = useState(false);
 
   // ── Fetch channels ──
+
+  const fetchApps = useCallback(async () => {
+    if (!token) return;
+    try {
+      const query = new URLSearchParams({ token, include_inactive: '1' });
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/apps?${query.toString()}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setApps(data.apps ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, [token, appCode]);
 
   const fetchChannels = useCallback(async () => {
     if (!token) return;
@@ -251,8 +266,9 @@ function ChannelsContent() {
   }, [token, appCode]);
 
   useEffect(() => {
+    fetchApps();
     fetchChannels();
-  }, [fetchChannels]);
+  }, [fetchApps, fetchChannels]);
 
   // ── Missing token ──
 
@@ -498,6 +514,37 @@ function ChannelsContent() {
       title={t.title}
       subtitle={t.subtitle}
       locale={locale}
+      actions={
+        apps.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {locale === 'en' ? 'Switch App' : '切换业务应用'}
+            </span>
+            <select
+              value={appCode}
+              onChange={(e) => {
+                const params = new URLSearchParams();
+                if (token) params.set('token', token);
+                params.set('theme', theme);
+                params.set('ui_mode', uiMode);
+                params.set('app_code', e.target.value);
+                if (locale !== 'zh') params.set('lang', locale);
+                window.location.href = `/admin/channels?${params.toString()}`;
+              }}
+              className={[
+                'rounded-lg border px-3 py-1.5 text-sm',
+                isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-300 bg-white text-slate-900',
+              ].join(' ')}
+            >
+              {apps.map((app) => (
+                <option key={app.id} value={app.code}>
+                  {app.name} ({app.code})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : undefined
+      }
     >
       {/* Error banner */}
       {error && (

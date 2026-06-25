@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/admin-auth';
 import { prisma } from '@/lib/db';
-import { resolveAppByCode } from '@/lib/app-context';
+import { resolveAppByCodeForAdmin } from '@/lib/app-context';
 
 const updateChannelSchema = z.object({
   group_id: z.number().int().positive().nullable().optional(),
@@ -35,7 +35,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
     const body = parsed.data;
 
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
     const existing = await prisma.channel.findFirst({ where: { id, appId: app.id } });
     if (!existing) {
       return NextResponse.json({ error: '渠道不存在' }, { status: 404 });
@@ -93,7 +93,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const { id } = await params;
     const appCode = request.nextUrl.searchParams.get('app_code');
-    const app = await resolveAppByCode(appCode);
+    const app = await resolveAppByCodeForAdmin(appCode);
 
     const existing = await prisma.channel.findFirst({ where: { id, appId: app.id } });
     if (!existing) {

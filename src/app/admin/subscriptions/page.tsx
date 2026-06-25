@@ -322,6 +322,7 @@ function SubscriptionsContent() {
   /* --- shared state --- */
   const [activeTab, setActiveTab] = useState<'plans' | 'subs'>('plans');
   const [error, setError] = useState('');
+  const [apps, setApps] = useState<{ id: string; code: string; name: string }[]>([]);
 
   /* --- plans state --- */
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -356,6 +357,21 @@ function SubscriptionsContent() {
   const [subsUser, setSubsUser] = useState<SubsUserInfo | null>(null);
   const [subsLoading, setSubsLoading] = useState(false);
   const [subsSearched, setSubsSearched] = useState(false);
+
+  /* --- fetch apps --- */
+  const fetchApps = useCallback(async () => {
+    if (!token) return;
+    try {
+      const query = new URLSearchParams({ token, include_inactive: '1' });
+      if (appCode) query.set('app_code', appCode);
+      const res = await fetch(`/api/admin/apps?${query.toString()}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setApps(data.apps ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, [token, appCode]);
 
   /* --- fetch plans --- */
   const fetchPlans = useCallback(async () => {
@@ -396,9 +412,10 @@ function SubscriptionsContent() {
   }, [token]);
 
   useEffect(() => {
+    fetchApps();
     fetchPlans();
     fetchGroups();
-  }, [fetchPlans, fetchGroups]);
+  }, [fetchApps, fetchPlans, fetchGroups]);
 
   /* auto-fetch subs when switching to subs tab */
   useEffect(() => {
@@ -694,6 +711,35 @@ function SubscriptionsContent() {
       locale={locale}
       actions={
         <>
+          {apps.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                {locale === 'en' ? 'Switch App' : '切换业务应用'}
+              </span>
+              <select
+                value={appCode}
+                onChange={(e) => {
+                  const params = new URLSearchParams();
+                  if (token) params.set('token', token);
+                  params.set('theme', theme);
+                  params.set('ui_mode', uiMode);
+                  params.set('app_code', e.target.value);
+                  if (locale !== 'zh') params.set('lang', locale);
+                  window.location.href = `/admin/subscriptions?${params.toString()}`;
+                }}
+                className={[
+                  'rounded-lg border px-3 py-1.5 text-sm',
+                  isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-300 bg-white text-slate-900',
+                ].join(' ')}
+              >
+                {apps.map((app) => (
+                  <option key={app.id} value={app.code}>
+                    {app.name} ({app.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => {
