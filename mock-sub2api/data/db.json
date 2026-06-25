@@ -49,6 +49,16 @@
       "notes": "Created from mock console",
       "role": "user",
       "token": "mock-test-user-1c4fc0"
+    },
+    {
+      "id": 9005,
+      "username": "test-user",
+      "email": "test-user@example.com",
+      "status": "active",
+      "balance": 100,
+      "notes": "通过 mock 控台创建",
+      "role": "user",
+      "token": "mock-test-user-dbb050"
     }
   ],
   "groups": [

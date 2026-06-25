@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:mock-sub2api": "node mock-sub2api/server.mjs",
-    "dev:local": "bash scripts/dev-local.sh",
+    "dev:local": "node scripts/dev-local.mjs",
     "dev:stop": "pnpm kill:ports -- 3000 3001",
     "kill:ports": "node scripts/kill-ports.mjs",
     "build": "next build",
