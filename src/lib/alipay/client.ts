@@ -110,9 +110,7 @@ export function pageExecute(
     }
   }
 
-  // mock gateway 不校验请求签名，跳过签名避免测试私钥格式问题
-  const isMockGateway = /localhost|127\.0\.0\.1|mock-sub2api/i.test(gatewayBase);
-  params.sign = isMockGateway ? 'mock-sign' : generateSign(params, config.privateKey);
+  params.sign = generateSign(params, config.privateKey);
 
   const query = new URLSearchParams(params).toString();
   return `${gatewayBase}?${query}`;

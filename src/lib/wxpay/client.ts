@@ -3,10 +3,59 @@ import crypto from 'crypto';
 import { getEnv } from '@/lib/config';
 import type { WxpayPcOrderParams, WxpayH5OrderParams, WxpayRefundParams } from './types';
 
+function normalizePemBody(value: string): string {
+  return value
+    .replace(/-----BEGIN [^-]+-----/g, '')
+    .replace(/-----END [^-]+-----/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function formatPemBlock(body: string, label: string): string {
+  const lines = body.match(/.{1,64}/g)?.join('\n') ?? body;
+  return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----`;
+}
+
+function tryFormatKey<T>(candidates: string[], parse: (candidate: string) => T, exportPem: (parsed: T) => string): string {
+  for (const candidate of candidates) {
+    try {
+      return exportPem(parse(candidate.trim()));
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error('Unsupported Wxpay key format');
+}
+
 /** 自动补全 PEM 格式（公钥） */
 function formatPublicKey(key: string): string {
-  if (key.includes('-----BEGIN')) return key;
-  return `-----BEGIN PUBLIC KEY-----\n${key}\n-----END PUBLIC KEY-----`;
+  const trimmed = key.trim();
+  const body = normalizePemBody(trimmed);
+  const candidates = trimmed.includes('-----BEGIN')
+    ? [trimmed, formatPemBlock(body, 'PUBLIC KEY')]
+    : [formatPemBlock(body, 'PUBLIC KEY')];
+
+  return tryFormatKey(
+    candidates,
+    (candidate) => crypto.createPublicKey(candidate),
+    (parsed) => parsed.export({ type: 'spki', format: 'pem' }).toString(),
+  );
+}
+
+/** 自动补全 PEM 格式（私钥），兼容 PEM / 裸 base64 / PKCS1 / PKCS8 */
+function formatPrivateKey(key: string): string {
+  const trimmed = key.trim();
+  const body = normalizePemBody(trimmed);
+  const candidates = trimmed.includes('-----BEGIN')
+    ? [trimmed, formatPemBlock(body, 'PRIVATE KEY'), formatPemBlock(body, 'RSA PRIVATE KEY')]
+    : [formatPemBlock(body, 'PRIVATE KEY'), formatPemBlock(body, 'RSA PRIVATE KEY')];
+
+  return tryFormatKey(
+    candidates,
+    (candidate) => crypto.createPrivateKey(candidate),
+    (parsed) => parsed.export({ type: 'pkcs8', format: 'pem' }).toString(),
+  );
 }
 
 const DEFAULT_BASE_URL = 'https://api.mch.weixin.qq.com';
@@ -113,7 +162,7 @@ function getPayInstance(instanceConfig?: Record<string, string>): WxPay {
   const cached = payInstanceCache.get(cacheKey);
   if (cached) return cached;
 
-  const privateKey = Buffer.from(config.privateKey);
+  const privateKey = Buffer.from(formatPrivateKey(config.privateKey));
   if (!config.publicKey) {
     throw new Error('WXPAY_PUBLIC_KEY is required');
   }

@@ -179,6 +179,7 @@ interface ConfigFieldDef {
   sensitive: boolean;
   optional?: boolean;
   multiline?: boolean;
+  options?: Array<{ value: string; label: { en: string; zh: string } }>;
   placeholder?: { en: string; zh: string };
   hint?: { en: string; zh: string };
 }
@@ -206,7 +207,7 @@ const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
       sensitive: false,
       optional: true,
       placeholder: { en: 'https://openapi.alipay.com/gateway.do', zh: 'https://openapi.alipay.com/gateway.do' },
-      hint: { en: 'Only set this when routing Alipay requests to a mock or proxy gateway', zh: '只有在接入 mock 或代理网关时才需要填写' },
+      hint: { en: 'Only set this when routing Alipay requests to a proxy or custom gateway', zh: '只有在接入代理或自定义网关时才需要填写' },
     },
     {
       key: 'notifyUrl',
@@ -247,7 +248,7 @@ const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
       sensitive: false,
       optional: true,
       placeholder: { en: 'https://api.mch.weixin.qq.com', zh: 'https://api.mch.weixin.qq.com' },
-      hint: { en: 'Only set this when routing WeChat Pay requests to a mock or proxy gateway', zh: '只有在接入 mock 或代理网关时才需要填写' },
+      hint: { en: 'Only set this when routing WeChat Pay requests to a proxy or custom gateway', zh: '只有在接入代理或自定义网关时才需要填写' },
     },
     {
       key: 'notifyUrl',
@@ -311,6 +312,19 @@ const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
   ],
   stripe: [
     {
+      key: 'checkoutMode',
+      label: { en: 'Checkout Mode', zh: '收银台模式' },
+      sensitive: false,
+      options: [
+        { value: 'sdk', label: { en: 'Stripe SDK', zh: 'Stripe SDK' } },
+        { value: 'hosted', label: { en: 'Hosted Page', zh: '托管支付页' } },
+      ],
+      hint: {
+        en: 'Use hosted page only when the upstream creates its own checkout page and you only need a redirect link',
+        zh: '仅当上游自己创建支付页且当前实例只需要返回跳转链接时，才使用托管支付页模式',
+      },
+    },
+    {
       key: 'secretKey',
       label: { en: 'Secret Key', zh: '服务端密钥' },
       sensitive: true,
@@ -330,7 +344,7 @@ const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
       sensitive: false,
       optional: true,
       placeholder: { en: 'https://api.stripe.com', zh: 'https://api.stripe.com' },
-      hint: { en: 'Only set this when routing Stripe API calls to a mock gateway', zh: '只有在接入 mock Stripe 网关时才需要填写' },
+      hint: { en: 'Only set this when routing Stripe API calls to a proxy or custom gateway', zh: '只有在接入代理或自定义网关时才需要填写' },
     },
     {
       key: 'webhookSecret',
@@ -382,8 +396,6 @@ interface AdminApp {
   status: string;
 }
 
-const MOCK_CONSOLE_BASE_URL = 'http://localhost:3001';
-
 function splitCsv(value: string): string[] {
   return value
     .split(',')
@@ -408,10 +420,6 @@ function pickInstanceEndpoint(instance: ProviderInstanceData): { key: string; va
     }
   }
   return null;
-}
-
-function isMockValue(value: string): boolean {
-  return /localhost|127\.0\.0\.1|mock-sub2api|3001/i.test(value);
 }
 
 // ── Main Content ──
@@ -894,17 +902,8 @@ function PaymentConfigContent() {
   if (appCode) appQuery.set('app_code', appCode);
   if (locale !== 'zh') appQuery.set('lang', locale);
 
-  const payQuery = new URLSearchParams();
-  payQuery.set('token', 'mock-user-token');
-  payQuery.set('theme', theme);
-  payQuery.set('ui_mode', 'standalone');
-  if (appCode) payQuery.set('app_code', appCode);
-  if (locale !== 'zh') payQuery.set('lang', locale);
-
   const mainAdminUrl = `/admin?${appQuery.toString()}`;
   const appsAdminUrl = `/admin/apps?${appQuery.toString()}`;
-  const mainPayUrl = `/pay?${payQuery.toString()}`;
-  const mockConsoleUrl = `${MOCK_CONSOLE_BASE_URL}/mock-console${appCode ? `?app_code=${encodeURIComponent(appCode)}` : ''}`;
   const appScopedNote =
     locale === 'en'
       ? 'Payment instances and basic rules on this page are now scoped to the current app.'
@@ -1133,7 +1132,7 @@ function PaymentConfigContent() {
                             </div>
                             {endpoint && (
                               <div className="mt-2">
-                                <span className={badgeCls(isMockValue(endpoint.value) ? 'warn' : 'default')}>
+                                <span className={badgeCls('default')}>
                                   {endpoint.key}: {endpoint.value}
                                 </span>
                               </div>
@@ -1476,7 +1475,7 @@ function PaymentConfigContent() {
                                   <span className={badgeCls('default')}>{t.allChannels}</span>
                                 )}
                                 {endpoint && (
-                                  <span className={badgeCls(isMockValue(endpoint.value) ? 'warn' : 'default')}>
+                                  <span className={badgeCls('default')}>
                                     {endpoint.key}: {endpoint.value}
                                   </span>
                                 )}
@@ -1812,7 +1811,24 @@ function PaymentConfigContent() {
                           <span className="ml-0.5 text-red-500">*</span>
                         )}
                       </label>
-                      {field.multiline ? (
+                      {field.options ? (
+                        <select
+                          value={instanceForm.config[field.key] ?? field.options[0]?.value ?? ''}
+                          onChange={(e) =>
+                            setInstanceForm({
+                              ...instanceForm,
+                              config: { ...instanceForm.config, [field.key]: e.target.value },
+                            })
+                          }
+                          className={inputCls}
+                        >
+                          {field.options.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label[locale]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : field.multiline ? (
                         <textarea
                           value={instanceForm.config[field.key] ?? ''}
                           onChange={(e) =>

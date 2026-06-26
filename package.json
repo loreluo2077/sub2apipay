@@ -7,6 +7,7 @@
     "dev": "next dev",
     "dev:mock-sub2api": "node mock-sub2api/server.mjs",
     "dev:local": "node scripts/dev-local.mjs",
+    "rebuild:local-demo": "node scripts/rebuild-local-demo.mjs",
     "dev:stop": "pnpm kill:ports -- 3000 3001",
     "kill:ports": "node scripts/kill-ports.mjs",
     "build": "next build",
@@ -18,7 +19,7 @@
     "test": "vitest run",
     "test:e2e": "node scripts/test-e2e.mjs",
     "test:watch": "vitest",
-    "seed:real-demo-data": "node scripts/seed-real-demo-data.mjs"
+    "seed:real-demo-data": "node scripts/bootstrap-local-demo.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.4.1",

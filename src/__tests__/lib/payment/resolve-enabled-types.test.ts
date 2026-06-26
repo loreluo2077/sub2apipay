@@ -5,6 +5,24 @@ vi.mock('@/lib/system-config', () => ({
   getSystemConfig: vi.fn(),
 }));
 
+vi.mock('@/lib/db', () => ({
+  prisma: {
+    appConfig: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+    },
+  },
+}));
+
+vi.mock('@/lib/config', () => ({
+  getEnv: () => ({
+    MIN_RECHARGE_AMOUNT: 1,
+    MAX_RECHARGE_AMOUNT: 1000,
+    MAX_DAILY_RECHARGE_AMOUNT: 10000,
+    ORDER_TIMEOUT_MINUTES: 5,
+  }),
+}));
+
 vi.mock('@/lib/payment', () => ({
   initPaymentProviders: vi.fn(),
   ensureDBProviders: vi.fn().mockResolvedValue(undefined),
@@ -12,6 +30,7 @@ vi.mock('@/lib/payment', () => ({
 }));
 
 import { resolveEnabledPaymentTypes } from '@/lib/payment/resolve-enabled-types';
+import { resolveEnabledTypesFromInstances } from '@/lib/payment/resolve-enabled-types';
 
 describe('resolveEnabledPaymentTypes', () => {
   const allTypes = ['alipay', 'wxpay', 'stripe'];
@@ -50,5 +69,26 @@ describe('resolveEnabledPaymentTypes', () => {
 
   it('handles single type', () => {
     expect(resolveEnabledPaymentTypes(allTypes, 'wxpay')).toEqual(['wxpay']);
+  });
+
+  it('filters configured types by enabled instances', () => {
+    const result = resolveEnabledTypesFromInstances(
+      ['alipay', 'wxpay', 'alipay_direct', 'wxpay_direct', 'stripe'],
+      'alipay,wxpay,alipay_direct,wxpay_direct,stripe',
+      [
+        { providerKey: 'easypay', supportedTypes: 'alipay,wxpay', sortOrder: 0 },
+        { providerKey: 'alipay', supportedTypes: 'alipay_direct', sortOrder: 1 },
+        { providerKey: 'stripe', supportedTypes: 'stripe', sortOrder: 2 },
+      ],
+      (type) => {
+        if (type === 'alipay' || type === 'wxpay') return 'easypay';
+        if (type === 'alipay_direct') return 'alipay';
+        if (type === 'wxpay_direct') return 'wxpay';
+        if (type === 'stripe') return 'stripe';
+        return undefined;
+      },
+    );
+
+    expect(result).toEqual(['alipay', 'wxpay', 'alipay_direct', 'stripe']);
   });
 });

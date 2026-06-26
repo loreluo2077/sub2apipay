@@ -55,8 +55,10 @@ vi.mock('@/lib/payment', () => ({
   paymentRegistry: {
     getSupportedTypes: (...args: unknown[]) => mockGetSupportedTypes(...args),
     getProviderKey: (type: string) => {
-      if (type === 'alipay' || type === 'alipay_direct') return 'alipay';
-      if (type === 'wxpay' || type === 'wxpay_direct') return 'wxpay';
+      if (type === 'alipay') return 'easypay';
+      if (type === 'wxpay') return 'easypay';
+      if (type === 'alipay_direct') return 'alipay';
+      if (type === 'wxpay_direct') return 'wxpay';
       if (type === 'stripe') return 'stripe';
       return undefined;
     },
@@ -105,6 +107,43 @@ vi.mock('@/lib/payment/resolve-enabled-types', () => ({
     );
     return supported.filter((t: string) => set.has(t));
   },
+  resolveEnabledTypesFromInstances: (
+    supported: string[],
+    configured: string | undefined,
+    instances: { providerKey: string; supportedTypes: string | null }[],
+    getProviderKey: (type: string) => string | undefined,
+  ) => {
+    const configuredTypes =
+      !configured || configured.trim() === ''
+        ? supported
+        : supported.filter((t: string) =>
+            new Set(
+              configured
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean),
+            ).has(t),
+          );
+
+    return configuredTypes.filter((type: string) =>
+      instances.some((inst) => {
+        if (inst.providerKey !== getProviderKey(type)) return false;
+        if (!inst.supportedTypes || inst.supportedTypes.trim() === '') return true;
+        const types = inst.supportedTypes
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+        const baseType = type.startsWith('alipay')
+          ? 'alipay'
+          : type.startsWith('wxpay')
+            ? 'wxpay'
+            : type.startsWith('stripe')
+              ? 'stripe'
+              : type;
+        return types.includes(type) || types.includes(baseType);
+      }),
+    );
+  },
 }));
 
 import { GET } from '@/app/api/user/route';
@@ -122,8 +161,7 @@ describe('GET /api/user', () => {
     mockGetSupportedTypes.mockReturnValue(['alipay', 'wxpay', 'stripe']);
     mockResolveAppByCode.mockResolvedValue({ id: 'app_default', code: 'default', name: 'Default App', status: 'active' });
     mockFindMany.mockResolvedValue([
-      { providerKey: 'alipay', supportedTypes: 'alipay', config: '{}', sortOrder: 0 },
-      { providerKey: 'wxpay', supportedTypes: 'wxpay', config: '{}', sortOrder: 1 },
+      { providerKey: 'easypay', supportedTypes: 'alipay,wxpay', config: '{}', sortOrder: 0 },
       { providerKey: 'stripe', supportedTypes: 'stripe', config: '{"publishableKey":"pk_app_scope"}', sortOrder: 2 },
     ]);
     mockQueryMethodLimits.mockResolvedValue({
@@ -259,8 +297,9 @@ describe('GET /api/user', () => {
     // alipay and alipay_direct both have channel "alipay" in the mock
     mockGetSupportedTypes.mockReturnValue(['alipay', 'alipay_direct', 'stripe']);
     mockFindMany.mockResolvedValue([
-      { providerKey: 'alipay', supportedTypes: 'alipay,alipay_direct', config: '{}', sortOrder: 0 },
-      { providerKey: 'stripe', supportedTypes: 'stripe', config: '{"publishableKey":"pk_app_scope"}', sortOrder: 1 },
+      { providerKey: 'easypay', supportedTypes: 'alipay', config: '{}', sortOrder: 0 },
+      { providerKey: 'alipay', supportedTypes: 'alipay_direct', config: '{}', sortOrder: 1 },
+      { providerKey: 'stripe', supportedTypes: 'stripe', config: '{"publishableKey":"pk_app_scope"}', sortOrder: 2 },
     ]);
     mockQueryMethodLimits.mockResolvedValue({});
 
@@ -303,7 +342,7 @@ describe('GET /api/user', () => {
   });
 
   it('filters out payment types without app-scoped instances', async () => {
-    mockFindMany.mockResolvedValue([{ providerKey: 'alipay', supportedTypes: 'alipay', config: '{}', sortOrder: 0 }]);
+    mockFindMany.mockResolvedValue([{ providerKey: 'easypay', supportedTypes: 'alipay', config: '{}', sortOrder: 0 }]);
 
     const response = await GET(createRequest());
     const data = await response.json();
@@ -311,5 +350,25 @@ describe('GET /api/user', () => {
     expect(response.status).toBe(200);
     expect(data.config.enabledPaymentTypes).toEqual(['alipay']);
     expect(data.config.stripePublishableKey).toBeNull();
+  });
+
+  it('includes easypay alipay and wxpay when app has enabled easypay instance', async () => {
+    mockGetSupportedTypes.mockReturnValue(['alipay', 'wxpay', 'alipay_direct', 'wxpay_direct', 'stripe']);
+    mockGetAppConfigValues.mockResolvedValue({
+      ...defaultAppConfig,
+      ENABLED_PAYMENT_TYPES: 'alipay,wxpay,alipay_direct,wxpay_direct,stripe',
+    });
+    mockFindMany.mockResolvedValue([
+      { providerKey: 'easypay', supportedTypes: 'alipay,wxpay', config: '{}', sortOrder: 0 },
+      { providerKey: 'alipay', supportedTypes: 'alipay_direct', config: '{}', sortOrder: 1 },
+      { providerKey: 'wxpay', supportedTypes: 'wxpay_direct', config: '{}', sortOrder: 2 },
+      { providerKey: 'stripe', supportedTypes: 'stripe', config: '{"publishableKey":"pk_app_scope"}', sortOrder: 3 },
+    ]);
+
+    const response = await GET(createRequest());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.config.enabledPaymentTypes).toEqual(['alipay', 'wxpay', 'alipay_direct', 'wxpay_direct', 'stripe']);
   });
 });

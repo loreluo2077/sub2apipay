@@ -7,11 +7,9 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
-import { promisify } from 'node:util';
 import { createWriteStream, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const execFileAsync = promisify(execFile);
 const PORTS = [3000, 3001];
 const isWindows = process.platform === 'win32';
 
@@ -133,7 +131,7 @@ async function main() {
 
   console.log('[2/2] Starting services...');
   const mock = startService('mock-sub2api', 'node mock-sub2api/server.mjs');
-  const app = startService('next-dev', 'next dev');
+  const app = startService('next-dev', 'pnpm exec next dev');
 
   // Ctrl+C 时同时关闭两个子进程
   const cleanup = () => {

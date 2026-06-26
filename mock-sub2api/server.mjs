@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { URL } from 'node:url';
+import { Client } from 'pg';
 
 const PORT = Number(process.env.MOCK_SUB2API_PORT || 3001);
 const API_KEY = process.env.MOCK_SUB2API_ADMIN_API_KEY || 'mock-sub2api-admin-key';
@@ -13,6 +14,27 @@ const MAIN_APP_URL = process.env.MOCK_SUB2API_MAIN_APP_URL || 'http://localhost:
 const DEFAULT_APP_CODE = 'default';
 const DEFAULT_APP_NAME = '默认应用';
 const DEFAULT_STRIPE_NOTIFY_URL = `${MAIN_APP_URL}/api/stripe/webhook`;
+
+loadEnvFile(path.resolve(process.cwd(), '.env'));
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const text = fs.readFileSync(filePath, 'utf8');
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -321,7 +343,19 @@ function formatPrivateKey(key) {
   const normalized = normalizePemLikeValue(key);
   if (!normalized) return '';
   if (normalized.includes('-----BEGIN')) return normalized;
-  return `-----BEGIN PRIVATE KEY-----\n${wrapBase64(normalized)}\n-----END PRIVATE KEY-----`;
+
+  const raw = normalized.replace(/\s/g, '');
+
+  try {
+    const der = Buffer.from(raw, 'base64');
+    if (der.length > 8 && der[4] === 0x02 && der[5] === 0x01 && der[6] === 0x00 && der[7] === 0x02) {
+      return `-----BEGIN RSA PRIVATE KEY-----\n${wrapBase64(raw)}\n-----END RSA PRIVATE KEY-----`;
+    }
+  } catch {
+    /* fall back to PKCS8 */
+  }
+
+  return `-----BEGIN PRIVATE KEY-----\n${wrapBase64(raw)}\n-----END PRIVATE KEY-----`;
 }
 
 function formatPublicKey(key) {
@@ -335,6 +369,12 @@ function signRsaSha256Base64(content, privateKey) {
   const signer = crypto.createSign('RSA-SHA256');
   signer.update(content);
   return signer.sign(formatPrivateKey(privateKey), 'base64');
+}
+
+function verifyRsaSha256Base64(content, publicKey, signature) {
+  const verifier = crypto.createVerify('RSA-SHA256');
+  verifier.update(content);
+  return verifier.verify(formatPublicKey(publicKey), signature, 'base64');
 }
 
 function formDecode(value) {
@@ -377,6 +417,13 @@ function generateAlipaySign(params, privateKey) {
     .map(([key, value]) => `${key}=${value}`)
     .join('&');
   return signRsaSha256Base64(signStr, privateKey);
+}
+
+function verifyAlipayRequestSign(params, publicKey, signature) {
+  const signStr = sortedEntriesForSign(params, ['sign'])
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  return verifyRsaSha256Base64(signStr, publicKey, signature);
 }
 
 function buildAlipaySignedResponse(responseKey, payload, privateKey) {
@@ -572,6 +619,7 @@ function getProviderFieldDefs(provider) {
     return [
       { key: 'appId', label: 'App ID', placeholder: 'mock-alipay-app' },
       { key: 'privateKey', label: 'Alipay Private Key', placeholder: '用于回调签名和 query/refund/close 响应签名', multiline: true },
+      { key: 'publicKey', label: 'Merchant Public Key', placeholder: '用于校验主站请求签名', multiline: true },
       { key: 'sellerId', label: 'Seller ID', placeholder: '2088xxxxxxxxxxxx' },
       { key: 'gatewayBase', label: 'Gateway Base', placeholder: `${APP_URL}/mock-api/alipay/gateway.do`, readonly: true },
     ];
@@ -694,6 +742,66 @@ function buildMainPayUrlForUser(token, appCode, amount, paymentType) {
   if (amount) url.searchParams.set('amount', String(amount));
   if (paymentType) url.searchParams.set('payment_type', paymentType);
   return url.toString();
+}
+
+async function syncProviderConfigsFromMainDb() {
+  const connectionString = process.env.DATABASE_URL;
+  const adminToken = process.env.ADMIN_TOKEN || '';
+  if (!connectionString || !adminToken) {
+    return;
+  }
+
+  const client = new Client({ connectionString });
+  const decrypt = (ciphertext) => {
+    const key = crypto.createHash('sha256').update(adminToken).digest();
+    const [ivB64, tagB64, dataB64] = String(ciphertext || '').split(':');
+    if (!ivB64 || !tagB64 || !dataB64) {
+      throw new Error('Invalid encrypted config payload');
+    }
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
+    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]).toString('utf8');
+  };
+
+  try {
+    await client.connect();
+    const result = await client.query(`
+      select
+        a.code as app_code,
+        a.name as app_name,
+        p.provider_key,
+        p.config
+      from payment_provider_instances p
+      join apps a on a.id = p.app_id
+      where p.enabled = true
+        and p.provider_key in ('alipay', 'wxpay', 'stripe')
+    `);
+
+    const db = readDb();
+    for (const row of result.rows) {
+      const appCode = ensureMockApp(db, row.app_code, row.app_name);
+      let config = {};
+      try {
+        config = JSON.parse(decrypt(row.config));
+      } catch (error) {
+        console.error('mock-sub2api config sync decrypt failed:', error instanceof Error ? error.message : String(error));
+        continue;
+      }
+
+      const nextConfig = { ...config };
+      if (row.provider_key === 'alipay' && !nextConfig.gatewayBase) {
+        nextConfig.gatewayBase = `${APP_URL}/mock-api/alipay/gateway.do`;
+      }
+      if ((row.provider_key === 'wxpay' || row.provider_key === 'stripe') && !nextConfig.apiBase) {
+        nextConfig.apiBase = APP_URL;
+      }
+
+      updateProviderConfig(db, appCode, row.provider_key, nextConfig);
+    }
+    writeDb(db);
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 function findSessionByOrderId(db, appCode, orderId) {
@@ -1549,12 +1657,17 @@ const server = http.createServer(async (req, res) => {
     sessionAppCode = ensureMockApp(db, sessionAppCode);
     const providerConfig = appEntry.config || {};
     const privateKey = providerConfig.privateKey || '';
+    const publicKey = providerConfig.publicKey || '';
     if (!method) return badRequest(res, 'Alipay mock requires method');
+    const sign = String(params.sign || '').trim();
+    if (!sign) return badRequest(res, 'Alipay request missing sign');
+    if (!publicKey) return badRequest(res, `Alipay provider config missing publicKey for app_id ${appId || '(empty)'}`);
+    if (!verifyAlipayRequestSign(params, publicKey, sign)) {
+      return badRequest(res, `Alipay request signature verification failed for app_id ${appId || '(empty)'}`);
+    }
 
     if (method === 'alipay.trade.page.pay' || method === 'alipay.trade.wap.pay') {
       const bizContent = params.biz_content ? JSON.parse(params.biz_content) : {};
-      const mockGatewayPrivateKey = params.mock_gateway_private_key || providerConfig.privateKey || '';
-      const mockGatewaySellerId = params.mock_gateway_seller_id || providerConfig.sellerId || 'mock-seller';
       const session = upsertPaymentSession(db, {
         provider: 'alipay',
         type: 'alipay_direct',
@@ -1566,8 +1679,8 @@ const server = http.createServer(async (req, res) => {
         return_url: params.return_url || '',
         app_code: sessionAppCode,
         gateway_app_id: appId,
-        gateway_merchant_id: mockGatewaySellerId,
-        gateway_private_key: mockGatewayPrivateKey,
+        gateway_merchant_id: providerConfig.sellerId || 'mock-seller',
+        gateway_private_key: privateKey,
       });
       writeDb(db);
       return redirect(res, `/mock-pay/${encodeURIComponent(session.trade_no)}`);
@@ -2165,8 +2278,13 @@ const server = http.createServer(async (req, res) => {
   notFound(res);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   ensureDataFile();
+  try {
+    await syncProviderConfigsFromMainDb();
+  } catch (error) {
+    console.error('mock-sub2api config sync failed:', error instanceof Error ? error.message : String(error));
+  }
   console.log(`mock-sub2api listening on ${APP_URL}`);
   console.log(`admin api key: ${API_KEY}`);
 });

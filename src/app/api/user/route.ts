@@ -5,12 +5,12 @@ import { queryMethodLimits } from '@/lib/order/limits';
 import { ensureDBProviders, paymentRegistry } from '@/lib/payment';
 import { getPaymentDisplayInfo } from '@/lib/pay-utils';
 import { resolveLocale } from '@/lib/locale';
-import { resolveEnabledPaymentTypes } from '@/lib/payment/resolve-enabled-types';
+import { resolveEnabledTypesFromInstances } from '@/lib/payment/resolve-enabled-types';
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { resolveAppByCode } from '@/lib/app-context';
-import { matchesSupportedType } from '@/lib/payment/provider-instance';
 import { getAppConfigValues } from '@/lib/app-config';
+import { matchesSupportedType } from '@/lib/payment/provider-instance';
 
 export async function GET(request: NextRequest) {
   const locale = resolveLocale(request.nextUrl.searchParams.get('lang'));
@@ -59,22 +59,18 @@ export async function GET(request: NextRequest) {
         RECHARGE_MAX_AMOUNT: maxAmountVal,
         DAILY_RECHARGE_LIMIT: dailyLimitVal,
       }) => {
-        let enabledTypes = resolveEnabledPaymentTypes(supportedTypes, configuredPaymentTypesRaw);
-
         const activeInstancesForApp = await prisma.paymentProviderInstance.findMany({
           where: { appId: app.id, enabled: true },
           select: { providerKey: true, supportedTypes: true, config: true, sortOrder: true },
           orderBy: { sortOrder: 'asc' },
         });
 
-        enabledTypes = enabledTypes.filter((type) => {
-          const providerKey = paymentRegistry.getProviderKey(type);
-          if (!providerKey) return false;
-          return activeInstancesForApp.some((inst) => {
-            if (inst.providerKey !== providerKey) return false;
-            return matchesSupportedType(inst.supportedTypes, type);
-          });
-        });
+        const enabledTypes = resolveEnabledTypesFromInstances(
+          supportedTypes,
+          configuredPaymentTypesRaw,
+          activeInstancesForApp,
+          (type) => paymentRegistry.getProviderKey(type),
+        );
 
         const methodLimits = await queryMethodLimits(enabledTypes, { appId: app.id });
         let stripePublishableKey: string | null = null;

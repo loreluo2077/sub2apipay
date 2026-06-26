@@ -24,11 +24,6 @@ export class StripeProvider implements PaymentProvider {
 
   private client: Stripe | null = null;
 
-  private isHostedMockMode(): boolean {
-    const apiBase = this.instanceConfig?.apiBase?.trim();
-    return Boolean(apiBase && /localhost:3001|127\.0\.0\.1:3001|mock-sub2api/i.test(apiBase));
-  }
-
   constructor(instanceId?: string, instanceConfig?: Record<string, string>) {
     this.instanceId = instanceId;
     this.instanceConfig = instanceConfig;
@@ -63,11 +58,15 @@ export class StripeProvider implements PaymentProvider {
     return this.instanceConfig?.webhookSecret || getEnv().STRIPE_WEBHOOK_SECRET || undefined;
   }
 
+  private shouldUseHostedCheckout(): boolean {
+    return this.instanceConfig?.checkoutMode?.trim() === 'hosted';
+  }
+
   async createPayment(request: CreatePaymentRequest): Promise<CreatePaymentResponse> {
-    if (this.isHostedMockMode()) {
+    if (this.shouldUseHostedCheckout()) {
       const apiBase = this.instanceConfig?.apiBase?.trim();
       if (!apiBase) {
-        throw new Error('Stripe mock apiBase is required');
+        throw new Error('Stripe hosted checkout requires apiBase');
       }
       const formData = new URLSearchParams();
       formData.set('amount', String(Math.round(new Prisma.Decimal(request.amount).mul(100).toNumber())));
@@ -82,7 +81,7 @@ export class StripeProvider implements PaymentProvider {
       });
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(`Stripe mock hosted create failed: ${response.status} ${text}`);
+        throw new Error(`Stripe hosted checkout create failed: ${response.status} ${text}`);
       }
       const data = (await response.json()) as { id: string };
       const payUrl = new URL(`/mock-pay/${data.id}`, apiBase).toString();
