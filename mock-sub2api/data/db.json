@@ -552,7 +552,7 @@
         "certSerial": "SERIAL001",
         "notifyUrl": "http://localhost:3000/api/wxpay/notify",
         "apiBase": "http://localhost:3001",
-        "updated_at": "2026-06-26T01:17:37.315Z"
+        "updated_at": "2026-06-26T06:04:21.807Z"
       },
       "alipay": {
         "appId": "mock-alipay-app",
@@ -561,7 +561,7 @@
         "notifyUrl": "http://localhost:3000/api/alipay/notify",
         "gatewayBase": "http://localhost:3001/mock-api/alipay/gateway.do",
         "sellerId": "2088100000000000",
-        "updated_at": "2026-06-26T01:17:37.312Z"
+        "updated_at": "2026-06-26T06:04:21.809Z"
       },
       "stripe": {
         "secretKey": "sk_test_mock_local",
@@ -569,7 +569,7 @@
         "webhookSecret": "whsec_mock_local",
         "apiBase": "http://localhost:3001",
         "checkoutMode": "hosted",
-        "updated_at": "2026-06-26T01:17:37.315Z"
+        "updated_at": "2026-06-26T06:04:21.809Z"
       }
     },
     "mockfull_mqqw71ab": {
@@ -580,7 +580,7 @@
         "notifyUrl": "http://localhost:3000/api/alipay/notify",
         "gatewayBase": "http://localhost:3001/mock-api/alipay/gateway.do",
         "sellerId": "2088100000000000",
-        "updated_at": "2026-06-26T01:13:04.137Z"
+        "updated_at": "2026-06-26T06:04:21.809Z"
       },
       "wxpay": {
         "appId": "wx0000000071",
@@ -592,7 +592,7 @@
         "certSerial": "SERIAL001",
         "notifyUrl": "http://localhost:3000/api/wxpay/notify",
         "apiBase": "http://localhost:3001",
-        "updated_at": "2026-06-26T01:13:04.137Z"
+        "updated_at": "2026-06-26T06:04:21.809Z"
       },
       "stripe": {
         "secretKey": "sk_test_mqqw71ab",
@@ -600,7 +600,7 @@
         "webhookSecret": "whsec_mqqw71ab",
         "apiBase": "http://localhost:3001",
         "checkoutMode": "hosted",
-        "updated_at": "2026-06-26T01:13:04.137Z"
+        "updated_at": "2026-06-26T06:04:21.809Z"
       }
     },
     "aliok_mqqwgd38": {
@@ -611,7 +611,7 @@
         "notifyUrl": "http://localhost:3000/api/alipay/notify",
         "gatewayBase": "http://localhost:3001/mock-api/alipay/gateway.do",
         "sellerId": "2088100000000000",
-        "updated_at": "2026-06-26T01:13:04.137Z"
+        "updated_at": "2026-06-26T06:04:21.809Z"
       }
     }
   },
