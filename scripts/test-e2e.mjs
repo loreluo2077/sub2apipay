@@ -189,6 +189,16 @@ async function createApp(appCode, appName) {
   return data.app;
 }
 
+async function updateAppConfig(appCode, config) {
+  const { response, data } = await adminJson(`/api/admin/config?app_code=${encodeURIComponent(appCode)}`, {
+    method: 'PUT',
+    headers: createJsonHeaders(),
+    body: JSON.stringify({ configs: config }),
+  });
+
+  assert(response.ok, `Update app config failed: ${JSON.stringify(data)}`);
+}
+
 async function createProviderInstance(appCode) {
   const { response, data } = await adminJson(`/api/admin/provider-instances?app_code=${encodeURIComponent(appCode)}`, {
     method: 'POST',
@@ -313,6 +323,14 @@ async function runScenario() {
   logStep('创建业务应用');
   const app = await createApp(appCode, appName);
   assert(app.code === appCode, 'App code mismatch after creation');
+
+  logStep('为业务应用写入支付开关配置');
+  await updateAppConfig(appCode, [
+    { key: 'ENABLED_PAYMENT_TYPES', value: 'alipay,wxpay' },
+    { key: 'RECHARGE_MIN_AMOUNT', value: '1' },
+    { key: 'RECHARGE_MAX_AMOUNT', value: '1000' },
+    { key: 'DAILY_RECHARGE_LIMIT', value: '0' },
+  ]);
 
   logStep('为业务应用创建支付实例、渠道和订阅套餐');
   await createProviderInstance(appCode);

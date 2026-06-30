@@ -819,6 +819,68 @@ function findSessionByOrderId(db, appCode, orderId) {
   );
 }
 
+function findSessionByOrderIdAnyApp(db, orderId) {
+  const target = String(orderId || '').trim();
+  if (!target) return null;
+  return (
+    db.paymentSessions
+      .slice()
+      .reverse()
+      .find((session) => session.out_trade_no === target || session.trade_no === target) || null
+  );
+}
+
+function getPaymentFlowHint(paymentType) {
+  if (paymentType === 'alipay_direct') {
+    return '主站订单已创建，但支付宝上游会话尚未创建。请先从主站支付页真正打开支付宝收银台链接，然后再回到 mock 控制台。';
+  }
+  if (paymentType === 'wxpay_direct') {
+    return '主站订单已创建，但微信上游会话尚未出现。这通常说明下单流程尚未真正请求到微信 mock 接口，请回到主站重新发起一次。';
+  }
+  if (paymentType === 'stripe') {
+    return '主站订单已创建，但 Stripe 上游会话尚未出现。请回到主站重新进入支付流程，确认已真正拉起 Stripe mock。';
+  }
+  if (paymentType === 'alipay' || paymentType === 'wxpay') {
+    return '主站订单已创建，但聚合网关上游会话尚未出现。请回到主站重新发起支付，确认请求已经到达 mock 网关。';
+  }
+  return '主站订单已创建，但对应的上游支付会话尚未出现。请回到主站重新进入支付流程。';
+}
+
+async function findMainOrderById(orderId) {
+  const target = String(orderId || '').trim();
+  const connectionString = process.env.DATABASE_URL;
+  if (!target || !connectionString) return null;
+
+  const client = new Client({ connectionString });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `
+        select
+          o.id,
+          o.status,
+          o.payment_type,
+          o.payment_trade_no,
+          o.created_at,
+          o.updated_at,
+          a.code as app_code,
+          a.name as app_name,
+          p.provider_key,
+          p.name as provider_instance_name
+        from orders o
+        join apps a on a.id = o.app_id
+        left join payment_provider_instances p on p.id = o.provider_instance_id
+        where o.id = $1
+        limit 1
+      `,
+      [target],
+    );
+    return result.rows[0] || null;
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
 function getUserById(db, userId) {
   return db.users.find((user) => Number(user.id) === Number(userId)) || null;
 }
@@ -1260,7 +1322,7 @@ function renderPaymentLookupPanel(db, appCode) {
   return `
     <section class="panel">
       <h2>按订单号打开模拟支付页</h2>
-      <div class="muted" style="margin-bottom:12px;">主站下单后保留主站支付页，把订单号贴到这里，就能直接打开对应的 mock 支付页。</div>
+      <div class="muted" style="margin-bottom:12px;">这里查找的是 mock 上游支付会话，不是主站订单本身。若主站订单已创建但上游会话尚未出现，控制台会告诉你下一步该回到哪里继续真实流程。</div>
       <form method="get" action="/mock-console/open-payment">
         <div class="row">
           <label><span>应用 Code</span><input name="app_code" value="${escapeHtml(appCode)}" required /></label>
@@ -1441,8 +1503,24 @@ const server = http.createServer(async (req, res) => {
         withAppCode(`/mock-console?notice=${encodeURIComponent('请输入订单号后再打开模拟支付页')}`, lookupAppCode),
       );
     }
-    const session = findSessionByOrderId(db, lookupAppCode, orderId);
+    const session = findSessionByOrderId(db, lookupAppCode, orderId) || findSessionByOrderIdAnyApp(db, orderId);
     if (!session) {
+      const mainOrder = await findMainOrderById(orderId);
+      if (mainOrder) {
+        const orderAppCode = mainOrder.app_code || lookupAppCode;
+        const paymentType = String(mainOrder.payment_type || '');
+        const hint = getPaymentFlowHint(paymentType);
+        const providerText = mainOrder.provider_key ? `，实例 ${mainOrder.provider_key}` : '';
+        return redirect(
+          res,
+          withAppCode(
+            `/mock-console?notice=${encodeURIComponent(
+              `主站订单 ${orderId} 已创建（应用 ${orderAppCode}，支付方式 ${paymentType || 'unknown'}${providerText}），但 mock 上游支付会话尚未创建。${hint}`,
+            )}`,
+            orderAppCode,
+          ),
+        );
+      }
       return redirect(
         res,
         withAppCode(`/mock-console?notice=${encodeURIComponent(`未找到订单 ${orderId} 对应的模拟支付页`)}`, lookupAppCode),
