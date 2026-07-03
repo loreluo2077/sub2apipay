@@ -14,6 +14,8 @@ const MAIN_APP_URL = process.env.MOCK_SUB2API_MAIN_APP_URL || 'http://localhost:
 const DEFAULT_APP_CODE = 'default';
 const DEFAULT_APP_NAME = '默认应用';
 const DEFAULT_STRIPE_NOTIFY_URL = `${MAIN_APP_URL}/api/stripe/webhook`;
+const ORDER_STATUS_ACCESS_PURPOSE = 'order-status-access:v2';
+const ORDER_STATUS_ACCESS_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 loadEnvFile(path.resolve(process.cwd(), '.env'));
 
@@ -412,7 +414,14 @@ function sortedEntriesForSign(params, excludedKeys = ['sign']) {
     .sort(([a], [b]) => a.localeCompare(b));
 }
 
-function generateAlipaySign(params, privateKey) {
+function generateAlipayRequestSign(params, privateKey) {
+  const signStr = sortedEntriesForSign(params, ['sign'])
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  return signRsaSha256Base64(signStr, privateKey);
+}
+
+function generateAlipayNotifySign(params, privateKey) {
   const signStr = sortedEntriesForSign(params, ['sign', 'sign_type'])
     .map(([key, value]) => `${key}=${value}`)
     .join('&');
@@ -744,24 +753,96 @@ function buildMainPayUrlForUser(token, appCode, amount, paymentType) {
   return url.toString();
 }
 
+function decryptMainConfig(ciphertext) {
+  const adminToken = process.env.ADMIN_TOKEN || '';
+  if (!adminToken) {
+    throw new Error('ADMIN_TOKEN is required to decrypt provider config');
+  }
+  const key = crypto.createHash('sha256').update(adminToken).digest();
+  const [ivB64, tagB64, dataB64] = String(ciphertext || '').split(':');
+  if (!ivB64 || !tagB64 || !dataB64) {
+    throw new Error('Invalid encrypted config payload');
+  }
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]).toString('utf8');
+}
+
+function buildOrderStatusAccessSignature(orderId, userId, expiresAt) {
+  const adminToken = process.env.ADMIN_TOKEN || '';
+  if (!adminToken) {
+    throw new Error('ADMIN_TOKEN is required to build order status access token');
+  }
+  const derivedKey = crypto.createHmac('sha256', adminToken).update('order-status-access-key').digest('hex');
+  return crypto
+    .createHmac('sha256', derivedKey)
+    .update(`${ORDER_STATUS_ACCESS_PURPOSE}:${orderId}:${userId}:${expiresAt}`)
+    .digest('base64url');
+}
+
+function createOrderStatusAccessToken(orderId, userId) {
+  const expiresAt = Date.now() + ORDER_STATUS_ACCESS_TOKEN_TTL_MS;
+  const uid = Number.isFinite(Number(userId)) ? Number(userId) : 0;
+  return `${expiresAt}.${uid}.${buildOrderStatusAccessSignature(orderId, uid, expiresAt)}`;
+}
+
+function buildMainOrderResultUrl(orderId, userId, appCode) {
+  const url = new URL('/pay/result', MAIN_APP_URL);
+  url.searchParams.set('order_id', orderId);
+  url.searchParams.set('access_token', createOrderStatusAccessToken(orderId, userId));
+  if (appCode) url.searchParams.set('app_code', appCode);
+  return url.toString();
+}
+
+function buildMainOrderPaymentSubject(row) {
+  const payAmount = Number(row.pay_amount ?? row.amount ?? 0);
+  if (row.order_type === 'subscription' && (row.plan_product_name || row.plan_name)) {
+    return row.plan_product_name || `Sub2API 订阅 ${row.plan_name}`;
+  }
+  const prefix = String(row.product_name_prefix || '').trim();
+  const suffix = String(row.product_name_suffix || '').trim();
+  if (prefix || suffix) {
+    return `${prefix || ''} ${payAmount.toFixed(2)} ${suffix || ''}`.trim();
+  }
+  return `Sub2API ${payAmount.toFixed(2)} CNY`;
+}
+
+function buildAlipayCommonParams(appId) {
+  return {
+    app_id: appId,
+    format: 'JSON',
+    charset: 'utf-8',
+    sign_type: 'RSA2',
+    timestamp: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace('T', ' '),
+    version: '1.0',
+  };
+}
+
+function createAlipayCheckoutSession(db, params, sessionAppCode, providerConfig, appId) {
+  const bizContent = params.biz_content ? JSON.parse(params.biz_content) : {};
+  return upsertPaymentSession(db, {
+    provider: 'alipay',
+    type: 'alipay_direct',
+    out_trade_no: bizContent.out_trade_no,
+    trade_no: bizContent.out_trade_no,
+    money: bizContent.total_amount || '0.00',
+    name: bizContent.subject || 'Alipay Mock Payment',
+    notify_url: params.notify_url || '',
+    return_url: params.return_url || '',
+    app_code: sessionAppCode,
+    gateway_app_id: appId,
+    gateway_merchant_id: providerConfig.sellerId || 'mock-seller',
+    gateway_private_key: providerConfig.privateKey || '',
+  });
+}
+
 async function syncProviderConfigsFromMainDb() {
   const connectionString = process.env.DATABASE_URL;
-  const adminToken = process.env.ADMIN_TOKEN || '';
-  if (!connectionString || !adminToken) {
+  if (!connectionString || !process.env.ADMIN_TOKEN) {
     return;
   }
 
   const client = new Client({ connectionString });
-  const decrypt = (ciphertext) => {
-    const key = crypto.createHash('sha256').update(adminToken).digest();
-    const [ivB64, tagB64, dataB64] = String(ciphertext || '').split(':');
-    if (!ivB64 || !tagB64 || !dataB64) {
-      throw new Error('Invalid encrypted config payload');
-    }
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
-    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]).toString('utf8');
-  };
 
   try {
     await client.connect();
@@ -782,7 +863,7 @@ async function syncProviderConfigsFromMainDb() {
       const appCode = ensureMockApp(db, row.app_code, row.app_name);
       let config = {};
       try {
-        config = JSON.parse(decrypt(row.config));
+        config = JSON.parse(decryptMainConfig(row.config));
       } catch (error) {
         console.error('mock-sub2api config sync decrypt failed:', error instanceof Error ? error.message : String(error));
         continue;
@@ -832,7 +913,7 @@ function findSessionByOrderIdAnyApp(db, orderId) {
 
 function getPaymentFlowHint(paymentType) {
   if (paymentType === 'alipay_direct') {
-    return '主站订单已创建，但支付宝上游会话尚未创建。请先从主站支付页真正打开支付宝收银台链接，然后再回到 mock 控制台。';
+    return '主站订单已创建，但支付宝上游会话尚未创建。控制台会尝试按主站订单信息自动补建一次上游会话；若仍失败，请检查支付宝实例配置是否完整。';
   }
   if (paymentType === 'wxpay_direct') {
     return '主站订单已创建，但微信上游会话尚未出现。这通常说明下单流程尚未真正请求到微信 mock 接口，请回到主站重新发起一次。';
@@ -879,6 +960,118 @@ async function findMainOrderById(orderId) {
   } finally {
     await client.end().catch(() => {});
   }
+}
+
+async function findMainOrderPaymentContext(orderId) {
+  const target = String(orderId || '').trim();
+  const connectionString = process.env.DATABASE_URL;
+  if (!target || !connectionString) return null;
+
+  const client = new Client({ connectionString });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `
+        select
+          o.id,
+          o.user_id,
+          o.status,
+          o.amount,
+          o.pay_amount,
+          o.payment_type,
+          o.order_type,
+          o.provider_instance_id,
+          a.code as app_code,
+          a.name as app_name,
+          p.provider_key,
+          p.name as provider_instance_name,
+          p.config as provider_config,
+          apc.product_name_prefix,
+          apc.product_name_suffix,
+          sp.name as plan_name,
+          sp.product_name as plan_product_name
+        from orders o
+        join apps a on a.id = o.app_id
+        left join payment_provider_instances p on p.id = o.provider_instance_id
+        left join app_configs apc on apc.app_id = a.id
+        left join subscription_plans sp on sp.id = o.plan_id
+        where o.id = $1
+        limit 1
+      `,
+      [target],
+    );
+    return result.rows[0] || null;
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+async function bootstrapAlipayDirectSession(db, lookupAppCode, orderId) {
+  const mainOrder = await findMainOrderPaymentContext(orderId);
+  if (!mainOrder) return { ok: false, mainOrder: null, message: '主站订单不存在' };
+  if (String(mainOrder.payment_type || '') !== 'alipay_direct') {
+    return { ok: false, mainOrder, message: '当前订单不是支付宝官方直连订单' };
+  }
+  if (mainOrder.provider_key && mainOrder.provider_key !== 'alipay') {
+    return { ok: false, mainOrder, message: `订单绑定的渠道实例不是支付宝，而是 ${mainOrder.provider_key}` };
+  }
+  if (!mainOrder.provider_config) {
+    return { ok: false, mainOrder, message: '订单未绑定可用的支付宝实例配置' };
+  }
+
+  let instanceConfig = {};
+  try {
+    instanceConfig = JSON.parse(decryptMainConfig(mainOrder.provider_config));
+  } catch (error) {
+    return {
+      ok: false,
+      mainOrder,
+      message: `支付宝实例配置解密失败：${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  const missingFields = ['appId', 'privateKey', 'publicKey', 'notifyUrl'].filter((field) => !String(instanceConfig[field] || '').trim());
+  if (missingFields.length > 0) {
+    return {
+      ok: false,
+      mainOrder,
+      message: `支付宝实例配置缺少必要字段：${missingFields.join(', ')}`,
+    };
+  }
+
+  const payAmount = Number(mainOrder.pay_amount ?? mainOrder.amount ?? 0);
+  if (!Number.isFinite(payAmount) || payAmount <= 0) {
+    return { ok: false, mainOrder, message: `订单金额无效：${mainOrder.pay_amount ?? mainOrder.amount ?? ''}` };
+  }
+
+  const sessionAppCode = ensureMockApp(db, mainOrder.app_code || lookupAppCode, mainOrder.app_name);
+  const providerConfig = {
+    ...instanceConfig,
+    gatewayBase: instanceConfig.gatewayBase || `${APP_URL}/mock-api/alipay/gateway.do`,
+  };
+  updateProviderConfig(db, sessionAppCode, 'alipay', providerConfig);
+
+  const params = {
+    ...buildAlipayCommonParams(providerConfig.appId),
+    method: 'alipay.trade.page.pay',
+    biz_content: JSON.stringify({
+      out_trade_no: mainOrder.id,
+      product_code: 'FAST_INSTANT_TRADE_PAY',
+      total_amount: payAmount.toFixed(2),
+      subject: buildMainOrderPaymentSubject(mainOrder),
+    }),
+    notify_url: providerConfig.notifyUrl,
+    return_url: buildMainOrderResultUrl(mainOrder.id, mainOrder.user_id, sessionAppCode),
+  };
+  params.sign = generateAlipayRequestSign(params, providerConfig.privateKey);
+
+  if (!verifyAlipayRequestSign(params, providerConfig.publicKey, params.sign)) {
+    return { ok: false, mainOrder, message: '支付宝实例签名校验失败，请检查公钥和私钥是否匹配' };
+  }
+
+  const session = createAlipayCheckoutSession(db, params, sessionAppCode, providerConfig, providerConfig.appId);
+  writeDb(db);
+  return { ok: true, mainOrder, session };
 }
 
 function getUserById(db, userId) {
@@ -947,7 +1140,7 @@ async function sendAlipayNotify(session, db = readDb()) {
   const url = new URL(session.notify_url);
   const body = new URLSearchParams({
     ...params,
-    sign: privateKey ? generateAlipaySign(params, privateKey) : session.gateway_sign || 'mock-alipay-sign',
+    sign: privateKey ? generateAlipayNotifySign(params, privateKey) : session.gateway_sign || 'mock-alipay-sign',
   }).toString();
 
   const response = await fetch(url.toString(), {
@@ -1322,7 +1515,7 @@ function renderPaymentLookupPanel(db, appCode) {
   return `
     <section class="panel">
       <h2>按订单号打开模拟支付页</h2>
-      <div class="muted" style="margin-bottom:12px;">这里查找的是 mock 上游支付会话，不是主站订单本身。若主站订单已创建但上游会话尚未出现，控制台会告诉你下一步该回到哪里继续真实流程。</div>
+      <div class="muted" style="margin-bottom:12px;">这里优先查找 mock 上游支付会话。对于支付宝官方直连订单，若上游会话尚未落库，控制台会按主站订单信息自动补建一次，再为你打开对应的模拟支付页。</div>
       <form method="get" action="/mock-console/open-payment">
         <div class="row">
           <label><span>应用 Code</span><input name="app_code" value="${escapeHtml(appCode)}" required /></label>
@@ -1505,6 +1698,12 @@ const server = http.createServer(async (req, res) => {
     }
     const session = findSessionByOrderId(db, lookupAppCode, orderId) || findSessionByOrderIdAnyApp(db, orderId);
     if (!session) {
+      const bootstrapResult = await bootstrapAlipayDirectSession(db, lookupAppCode, orderId);
+      if (bootstrapResult.ok && bootstrapResult.session) {
+        return redirect(res, `/mock-pay/${encodeURIComponent(bootstrapResult.session.trade_no)}`);
+      }
+
+      const bootstrapMessage = bootstrapResult.mainOrder ? bootstrapResult.message : '';
       const mainOrder = await findMainOrderById(orderId);
       if (mainOrder) {
         const orderAppCode = mainOrder.app_code || lookupAppCode;
@@ -1515,7 +1714,7 @@ const server = http.createServer(async (req, res) => {
           res,
           withAppCode(
             `/mock-console?notice=${encodeURIComponent(
-              `主站订单 ${orderId} 已创建（应用 ${orderAppCode}，支付方式 ${paymentType || 'unknown'}${providerText}），但 mock 上游支付会话尚未创建。${hint}`,
+              `主站订单 ${orderId} 已创建（应用 ${orderAppCode}，支付方式 ${paymentType || 'unknown'}${providerText}），但 mock 上游支付会话尚未创建。${bootstrapMessage ? `自动补建失败：${bootstrapMessage}。` : ''}${hint}`,
             )}`,
             orderAppCode,
           ),
@@ -1745,21 +1944,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (method === 'alipay.trade.page.pay' || method === 'alipay.trade.wap.pay') {
-      const bizContent = params.biz_content ? JSON.parse(params.biz_content) : {};
-      const session = upsertPaymentSession(db, {
-        provider: 'alipay',
-        type: 'alipay_direct',
-        out_trade_no: bizContent.out_trade_no,
-        trade_no: bizContent.out_trade_no,
-        money: bizContent.total_amount || '0.00',
-        name: bizContent.subject || 'Alipay Mock Payment',
-        notify_url: params.notify_url || '',
-        return_url: params.return_url || '',
-        app_code: sessionAppCode,
-        gateway_app_id: appId,
-        gateway_merchant_id: providerConfig.sellerId || 'mock-seller',
-        gateway_private_key: privateKey,
-      });
+      const session = createAlipayCheckoutSession(
+        db,
+        params,
+        sessionAppCode,
+        { ...providerConfig, privateKey },
+        appId,
+      );
       writeDb(db);
       return redirect(res, `/mock-pay/${encodeURIComponent(session.trade_no)}`);
     }
