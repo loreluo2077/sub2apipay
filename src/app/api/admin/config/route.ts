@@ -5,16 +5,6 @@ import { prisma } from '@/lib/db';
 import { getAppConfigValues, setAppConfigValues, APP_CONFIG_KEYS } from '@/lib/app-config';
 import { resolveAppByCode } from '@/lib/app-context';
 
-const SENSITIVE_PATTERNS = ['KEY', 'SECRET', 'PASSWORD', 'PRIVATE'];
-const MASK_RE = /\*{4,}/;
-
-function maskSensitiveValue(key: string, value: string): string {
-  const isSensitive = SENSITIVE_PATTERNS.some((pattern) => key.toUpperCase().includes(pattern));
-  if (!isSensitive) return value;
-  if (value.length <= 4) return '****';
-  return '*'.repeat(value.length - 4) + value.slice(-4);
-}
-
 function parseCSV(value: string): string[] {
   return value
     .split(',')
@@ -77,11 +67,7 @@ export async function GET(request: NextRequest) {
       label: key,
     }));
     const sharedRows = sharedConfigs.filter((config) => !APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
-    const masked = [...appConfigRows, ...sharedRows].map((config) => ({
-      ...config,
-      value: maskSensitiveValue(config.key, config.value),
-    }));
-    return NextResponse.json({ configs: masked });
+    return NextResponse.json({ configs: [...appConfigRows, ...sharedRows] });
   } catch (error) {
     if (error instanceof Error && error.message === 'APP_NOT_FOUND') {
       return NextResponse.json({ error: '业务应用不存在' }, { status: 404 });
@@ -141,13 +127,12 @@ export async function PUT(request: NextRequest) {
     const blocked = await validateEnabledProviders(appScopedConfigs);
     if (blocked) return blocked;
 
-    // Skip masked sensitive values (user didn't change them)
-    const filteredConfigs = configs.filter(
-      (c: { key: string; value: string }) =>
-        !(SENSITIVE_PATTERNS.some((p) => c.key.toUpperCase().includes(p)) && MASK_RE.test(c.value)),
+    const filteredAppConfigs = configs.filter((config: { key: string }) =>
+      APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]),
     );
-    const filteredAppConfigs = filteredConfigs.filter((config: { key: string }) => APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
-    const filteredSharedConfigs = filteredConfigs.filter((config: { key: string }) => !APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]));
+    const filteredSharedConfigs = configs.filter((config: { key: string }) =>
+      !APP_CONFIG_KEYS.includes(config.key as (typeof APP_CONFIG_KEYS)[number]),
+    );
 
     if (filteredAppConfigs.length > 0) {
       await setAppConfigValues(

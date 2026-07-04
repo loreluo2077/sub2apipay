@@ -5,7 +5,7 @@
       "username": "demo-user",
       "email": "demo-user@example.com",
       "status": "active",
-      "balance": 301.18,
+      "balance": 288.84,
       "notes": "Primary demo account",
       "role": "user",
       "token": "mock-user-token"
@@ -304,9 +304,62 @@
       "used_by": 1001,
       "used_at": "2026-07-03T01:32:40.367Z",
       "notes": "sub2apipay recharge order:cmr49bgxo0003ovirqnfy23ie"
+    },
+    {
+      "id": 16,
+      "code": "s2p_cmr5ywbh50000s2irrmzf6dcd069",
+      "type": "balance",
+      "value": 20,
+      "status": "used",
+      "used_by": 1001,
+      "used_at": "2026-07-04T06:14:58.185Z",
+      "notes": "sub2apipay recharge order:cmr5ywbh50000s2irrmz8j8s7"
     }
   ],
-  "balanceLogs": [],
+  "balanceLogs": [
+    {
+      "user_id": 1001,
+      "operation": "subtract",
+      "balance": 20,
+      "notes": "sub2apipay refund order:cmr5ywbh50000s2irrmz8j8s7",
+      "created_at": "2026-07-04T06:15:41.564Z"
+    },
+    {
+      "user_id": 1001,
+      "operation": "subtract",
+      "balance": 20,
+      "notes": "sub2apipay refund order:cmr4uy7am0000kggupptwf8wp",
+      "created_at": "2026-07-04T06:15:48.313Z"
+    },
+    {
+      "user_id": 1001,
+      "operation": "add",
+      "balance": 20,
+      "notes": "sub2apipay refund rollback order:cmr4uy7am0000kggupptwf8wp",
+      "created_at": "2026-07-04T06:15:48.961Z"
+    },
+    {
+      "user_id": 1001,
+      "operation": "subtract",
+      "balance": 12.34,
+      "notes": "sub2apipay refund order:cmr49bgxo0003ovirqnfy23ie",
+      "created_at": "2026-07-04T06:15:53.371Z"
+    },
+    {
+      "user_id": 1001,
+      "operation": "subtract",
+      "balance": 20,
+      "notes": "sub2apipay refund order:cmr4uy7am0000kggupptwf8wp",
+      "created_at": "2026-07-04T06:16:02.995Z"
+    },
+    {
+      "user_id": 1001,
+      "operation": "add",
+      "balance": 20,
+      "notes": "sub2apipay refund rollback order:cmr4uy7am0000kggupptwf8wp",
+      "created_at": "2026-07-04T06:16:03.383Z"
+    }
+  ],
   "paymentSessions": [
     {
       "id": 1,
@@ -713,12 +766,30 @@
       "return_url": "http://localhost:3000/pay/result?order_id=cmr49bgxo0003ovirqnfy23ie&access_token=1783128690532.1001.wr0Aoc9X_g9SY1wrWae--0pFbWlVZfA0VKfG28iJMmw&app_code=default",
       "name": "Sub2API 12.34 CNY",
       "app_code": "default",
-      "status": 1,
+      "status": -1,
       "created_at": "2026-07-03T01:31:30.539Z",
-      "updated_at": "2026-07-03T01:32:36.041Z",
+      "updated_at": "2026-07-04T06:15:53.733Z",
       "gateway_app_id": "mock-alipay-app",
       "gateway_merchant_id": "2088100000000000",
       "gateway_private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCsj3lSpHrKXiEf\n/6kRjdw9XT5KTroEwH8RlOlKD+j7fXhecBD9IeSe8pzOnFUrqd+ENDy2z/ZN56A8\nYm2C3y6wxM1HzijGCs3Fz4Lm7eZ2DXt520eRX1W7monhEzWXmZqE+X/TWXxVZ2ca\neSzme0B8Va0ugDX4lxpGaUxZrWfreGIzZ0ldhkwNbtuqYDvU7AbAlNu0R40qcPXl\ncqihjhivF4zBcU0wi7x50P3VrYYzGuE2AEvWj5wDnBuCXofTNWhGMhjWXWyN3l3D\noET7CZq141z8YimDdKCEVKF2uf6YZ1YcQ/X68Eghdght0EC93BZch10OhRn94aK7\n09uJFDSVAgMBAAECggEAFAKkO0LjEVYGidckFCrK7BvEtim4dQYchh2qSuIa7pTv\ncSYWNkBoqkzwhZ4H22MczhAfrURi58hRIsd4Mwmt+KYttuKvhD2q/IISiDR0ueJY\n2/nja/Zt8u4aCI1pdM3FZx+mpMvW+PFfeaitHgITaYem6EJKX+wnyhv6VFjhOOMg\n/ule4aSYsbSGYHs6+tL5ctaQNnd4kP3jMqqvibV/O/XJltTpPpvA8xjFnrXSJNME\ntMB7EH+hCGv/xHQiXXZM2ivkxn5o6LrXvcq2ZMHaU9EF+92YihRt1Qme+hPz9Sea\nbmrDOHN5tBWpwvizjV9aZwUgqI32yC2A+QToFTxUGQKBgQDujgMXZx9YCxqJajMb\ndg10z5eG3hrv7Gng5T++p7oAN677TakOTCe+OiMv2nqCjHUpzOBTg2IpO75XZxwA\n7FFG+WZwJkC6vn14/kWIlPBjArLFVzod9GdMf6e4ABJrFklzM03Agl4b7wfw31Y3\nBfP79iC/EdeULHEr2tmRbjRQHQKBgQC5Lfs/QmN44zSHK4x/0xOuwc3xXwxiesFj\nntgEAoBUnO7lKAHPsj3cAz1wn3wMh9QGOaXGN/ypnDv6PYm6G9jpI5thmU8vB9F0\nP75AwgR27hXPky7AcWsgwBXVNBhCxPRs3hd6FtW5LSvUasv6CQ7KNTxyDiO4uoyH\nEFfjnNO82QKBgQCS1YCboBLP64269U5d4c0okDqRfhaQhTEqh5Ez9iNrzNp8vnGH\nZmK0GS7dXpo3zuKzBvMxFFaQUMC5JbM78jmY+RwPfcwr5eJvXftItXw9RUTqaOVR\n2MTYdl6yyACOP5qYOQTrsJLimL+HiMCVf6mM9hNz6DSMdMp4Fu4CMRYsFQKBgDrL\nZqJHKd4QBXWFVi6fjfhGgGTKkNwTraM7o8piIOy8hv0rHqgbJ5jbTn6bpH82AROY\n6hFtZUNU35YsQ7ZbcRtUutjaHFIKYW5PbtCQyWoZXcNyL73aRPE5C7WNvMY2UoTe\nXwXcii8pMGlZHzpb9d4t2Os9ognc8RFRFxaljHTBAoGBALxSpkiEDhFqa6i2hfnT\n0/KsJPiAlPA6pxTIkSyTtgAJNUjqKLFviDdM/KEZxPmMWB/7QJ+YsUs0f+aMwzFj\ntbFm7tcao7Gavj3qKRv8Tun1leoyxdhimCgJZkif0HsCTlR47gp/bRj7MBPPXuRl\nz0O3ltvvtN3iJ2xi/UWcsl1j\n-----END PRIVATE KEY-----\n"
+    },
+    {
+      "id": 23,
+      "trade_no": "pi_cmr5ywbh50000s2irrmz8j8s7",
+      "out_trade_no": "cmr5ywbh50000s2irrmz8j8s7",
+      "money": "20.00",
+      "type": "stripe",
+      "provider": "stripe",
+      "pid": "mock-pid",
+      "notify_url": "http://localhost:3000/api/stripe/webhook",
+      "return_url": "",
+      "name": "Sub2API 20.00 CNY",
+      "app_code": "default",
+      "status": -1,
+      "created_at": "2026-07-04T06:14:41.106Z",
+      "updated_at": "2026-07-04T06:15:41.990Z",
+      "stripe_client_secret": "pi_cmr5ywbh50000s2irrmz8j8s7_secret_mock",
+      "stripe_currency": "cny"
     }
   ],
   "providerConfigs": {
@@ -733,7 +804,7 @@
         "certSerial": "SERIAL001",
         "notifyUrl": "http://localhost:3000/api/wxpay/notify",
         "apiBase": "http://localhost:3001",
-        "updated_at": "2026-07-03T01:29:31.675Z"
+        "updated_at": "2026-07-04T16:49:21.611Z"
       },
       "alipay": {
         "appId": "mock-alipay-app",
@@ -742,7 +813,7 @@
         "notifyUrl": "http://localhost:3000/api/alipay/notify",
         "gatewayBase": "http://localhost:3001/mock-api/alipay/gateway.do",
         "sellerId": "2088100000000000",
-        "updated_at": "2026-07-03T01:31:30.521Z"
+        "updated_at": "2026-07-04T16:49:21.614Z"
       },
       "stripe": {
         "secretKey": "sk_test_mock_local",
@@ -750,7 +821,7 @@
         "webhookSecret": "whsec_mock_local",
         "apiBase": "http://localhost:3001",
         "checkoutMode": "hosted",
-        "updated_at": "2026-07-03T01:29:31.685Z"
+        "updated_at": "2026-07-04T16:49:21.614Z"
       }
     },
     "mockfull_mqqw71ab": {
@@ -761,7 +832,7 @@
         "notifyUrl": "http://localhost:3000/api/alipay/notify",
         "gatewayBase": "http://localhost:3001/mock-api/alipay/gateway.do",
         "sellerId": "2088100000000000",
-        "updated_at": "2026-07-03T01:29:31.684Z"
+        "updated_at": "2026-07-04T16:49:21.614Z"
       },
       "wxpay": {
         "appId": "wx0000000071",
@@ -773,7 +844,7 @@
         "certSerial": "SERIAL001",
         "notifyUrl": "http://localhost:3000/api/wxpay/notify",
         "apiBase": "http://localhost:3001",
-        "updated_at": "2026-07-03T01:29:31.684Z"
+        "updated_at": "2026-07-04T16:49:21.614Z"
       },
       "stripe": {
         "secretKey": "sk_test_mqqw71ab",
@@ -781,7 +852,7 @@
         "webhookSecret": "whsec_mqqw71ab",
         "apiBase": "http://localhost:3001",
         "checkoutMode": "hosted",
-        "updated_at": "2026-07-03T01:29:31.685Z"
+        "updated_at": "2026-07-04T16:49:21.614Z"
       }
     },
     "aliok_mqqwgd38": {
@@ -792,15 +863,15 @@
         "notifyUrl": "http://localhost:3000/api/alipay/notify",
         "gatewayBase": "http://localhost:3001/mock-api/alipay/gateway.do",
         "sellerId": "2088100000000000",
-        "updated_at": "2026-07-03T01:29:31.684Z"
+        "updated_at": "2026-07-04T16:49:21.614Z"
       }
     },
     "e2e_mqzhaky7": {}
   },
   "nextIds": {
     "app": 2,
-    "redeemCode": 16,
+    "redeemCode": 17,
     "subscription": 2,
-    "paymentSession": 23
+    "paymentSession": 24
   }
 }

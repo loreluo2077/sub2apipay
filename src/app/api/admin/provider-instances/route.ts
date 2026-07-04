@@ -4,30 +4,8 @@ import { prisma } from '@/lib/db';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { resolveAppByCode } from '@/lib/app-context';
 
-/** Fields whose values should be masked when returning to the client */
-const SENSITIVE_PATTERNS = ['key', 'pkey', 'secret', 'private', 'password'];
-
-function isSensitiveField(fieldName: string): boolean {
-  const lower = fieldName.toLowerCase();
-  return SENSITIVE_PATTERNS.some((p) => lower.includes(p));
-}
-
-/**
- * Decrypt config JSON and mask sensitive fields (show only last 4 chars).
- */
-function decryptAndMaskConfig(encryptedConfig: string): Record<string, string> {
-  const config: Record<string, string> = JSON.parse(decrypt(encryptedConfig));
-  const masked: Record<string, string> = {};
-  for (const [key, value] of Object.entries(config)) {
-    if (isSensitiveField(key) && value && value.length > 4) {
-      masked[key] = '*'.repeat(value.length - 4) + value.slice(-4);
-    } else if (isSensitiveField(key) && value) {
-      masked[key] = '****';
-    } else {
-      masked[key] = value;
-    }
-  }
-  return masked;
+function decryptConfig(encryptedConfig: string): Record<string, string> {
+  return JSON.parse(decrypt(encryptedConfig));
 }
 
 // GET: List all instances (optionally filter by providerKey)
@@ -49,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     const result = instances.map((inst) => ({
       ...inst,
-      config: decryptAndMaskConfig(inst.config),
+      config: decryptConfig(inst.config),
       limits: inst.limits ? JSON.parse(inst.limits) : null,
     }));
 
@@ -113,7 +91,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         ...instance,
-        config: decryptAndMaskConfig(instance.config),
+        config: decryptConfig(instance.config),
       },
       { status: 201 },
     );

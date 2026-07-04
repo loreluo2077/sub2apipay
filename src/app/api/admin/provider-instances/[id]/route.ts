@@ -13,34 +13,18 @@ function isSensitiveField(fieldName: string): boolean {
   return SENSITIVE_PATTERNS.some((p) => lower.includes(p));
 }
 
-function maskValue(value: string): string {
-  if (!value) return '****';
-  return value.length > 4 ? '*'.repeat(value.length - 4) + value.slice(-4) : '****';
-}
-
-function decryptAndMaskConfig(encryptedConfig: string): Record<string, string> {
-  const config: Record<string, string> = JSON.parse(decrypt(encryptedConfig));
-  const masked: Record<string, string> = {};
-  for (const [key, value] of Object.entries(config)) {
-    masked[key] = isSensitiveField(key) && value ? maskValue(value) : value;
-  }
-  return masked;
-}
-
-function isMaskedValue(value: string): boolean {
-  return /\*{4,}/.test(value);
+function decryptConfig(encryptedConfig: string): Record<string, string> {
+  return JSON.parse(decrypt(encryptedConfig));
 }
 
 function mergeConfigWithExisting(
   newConfig: Record<string, string>,
   existingConfig: Record<string, string>,
 ): Record<string, string> {
-  const merged: Record<string, string> = {};
-  for (const [key, value] of Object.entries(newConfig)) {
-    merged[key] =
-      typeof value === 'string' && isMaskedValue(value) && key in existingConfig ? existingConfig[key] : value;
-  }
-  return merged;
+  return {
+    ...existingConfig,
+    ...newConfig,
+  };
 }
 
 function hasCredentialChange(merged: Record<string, string>, existing: Record<string, string>): boolean {
@@ -84,7 +68,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({
       ...instance,
-      config: decryptAndMaskConfig(instance.config),
+      config: decryptConfig(instance.config),
       limits: instance.limits ? JSON.parse(instance.limits) : null,
     });
   } catch (error) {
@@ -133,7 +117,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       if (typeof config !== 'object' || config === null) {
         return NextResponse.json({ error: 'config 必须是对象' }, { status: 400 });
       }
-      const existingConfig: Record<string, string> = JSON.parse(decrypt(existing.config));
+      const existingConfig = decryptConfig(existing.config);
       const mergedConfig = mergeConfigWithExisting(config as Record<string, string>, existingConfig);
       data.config = encrypt(JSON.stringify(mergedConfig));
 
@@ -165,7 +149,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const updated = await prisma.paymentProviderInstance.update({ where: { id }, data });
     return NextResponse.json({
       ...updated,
-      config: decryptAndMaskConfig(updated.config),
+      config: decryptConfig(updated.config),
       limits: updated.limits ? JSON.parse(updated.limits) : null,
     });
   } catch (error) {

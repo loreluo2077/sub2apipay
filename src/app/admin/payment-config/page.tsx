@@ -453,7 +453,6 @@ function PaymentConfigContent() {
   const [rcSaving, setRcSaving] = useState(false);
   const [rcLoadBalanceStrategy, setRcLoadBalanceStrategy] = useState('round-robin');
   const [rcSub2apiKey, setRcSub2apiKey] = useState('');
-  const [rcSub2apiKeyMasked, setRcSub2apiKeyMasked] = useState(false);
   const [rcAutoRefundEnabled, setRcAutoRefundEnabled] = useState(true);
   const [rcEnabledProviders, setRcEnabledProviders] = useState('');
   const [rcEnabledPaymentTypes, setRcEnabledPaymentTypes] = useState('');
@@ -549,11 +548,7 @@ function PaymentConfigContent() {
         if (c.key === 'DAILY_RECHARGE_LIMIT') setRcDailyLimit(c.value);
         if (c.key === 'ORDER_TIMEOUT_MINUTES') setRcOrderTimeout(c.value);
         if (c.key === 'LOAD_BALANCE_STRATEGY') setRcLoadBalanceStrategy(c.value || 'round-robin');
-        if (c.key === 'SUB2API_ADMIN_API_KEY') {
-          const masked = /\*{4,}/.test(c.value);
-          setRcSub2apiKey(masked ? c.value : c.value);
-          setRcSub2apiKeyMasked(masked);
-        }
+        if (c.key === 'SUB2API_ADMIN_API_KEY') setRcSub2apiKey(c.value);
         if (c.key === 'DEFAULT_DEDUCT_BALANCE') setRcAutoRefundEnabled(c.value === 'true');
       }
     } catch {
@@ -799,7 +794,7 @@ function PaymentConfigContent() {
             },
             {
               key: 'SUB2API_ADMIN_API_KEY',
-              value: rcSub2apiKeyMasked && /\*{4,}/.test(rcSub2apiKey) ? rcSub2apiKey : rcSub2apiKey.trim(),
+              value: rcSub2apiKey.trim(),
               group: 'connection',
               label: 'Sub2API Admin API Key',
             },
@@ -1300,11 +1295,10 @@ function PaymentConfigContent() {
                 <div className="mt-4">
                   <label className={labelCls}>{t.sub2apiAdminApiKey}</label>
                   <input
-                    type="password"
+                    type="text"
                     value={rcSub2apiKey}
                     onChange={(e) => {
                       setRcSub2apiKey(e.target.value);
-                      setRcSub2apiKeyMasked(false);
                     }}
                     className={inputCls}
                     placeholder={t.sub2apiAdminApiKeyHint}
@@ -1312,8 +1306,8 @@ function PaymentConfigContent() {
                   />
                   <p className={sectionHintCls}>
                     {locale === 'en'
-                      ? 'Stored in database only. Leaving the masked value unchanged keeps the existing secret.'
-                      : '仅保存到数据库。保持当前掩码不变时，会继续沿用已保存的密钥。'}
+                      ? 'Stored in database only. The value shown here is the current saved value.'
+                      : '仅保存到数据库。这里显示的就是当前已保存的值。'}
                   </p>
                 </div>
               </div>
@@ -1557,8 +1551,8 @@ function PaymentConfigContent() {
               </h2>
               <p className={sectionHintCls}>
                 {locale === 'en'
-                  ? 'Use production-like values here. Sensitive fields keep the masked value unless you overwrite them.'
-                  : '这里尽量填写接近生产的真实配置。敏感字段如果保持掩码不变，就会继续沿用原值。'}
+                  ? 'Use production-like values here. Sensitive fields are shown directly so you can inspect and edit them in place.'
+                  : '这里尽量填写接近生产的真实配置。敏感字段会直接显示，方便你查看和原地编辑。'}
               </p>
             </div>
 
